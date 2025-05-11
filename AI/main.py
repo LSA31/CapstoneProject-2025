@@ -1,3 +1,4 @@
+from ai.application.summay_service import create_summary_diary
 from ai.application.voice_service import get_response, speech_to_text
 from fastapi import FastAPI, File, UploadFile
 from pydantic import BaseModel
@@ -26,5 +27,6 @@ class SummaryDiaryResponse(BaseModel):
 
 
 @app.post("/summary")
-def create_summary_diary(request: ChattingRequest) -> SummaryDiaryResponse:
-    return request.chats
+async def get_summary_diary(request: ChattingRequest) -> SummaryDiaryResponse:
+    response = await create_summary_diary(request.chats)
+    return SummaryDiaryResponse(diary=response)
