@@ -25,13 +25,27 @@ export default function Main() {
   const headerHeight = 10;
   const cardHeight = screenHeight - headerHeight - insets.top - insets.bottom;
 
-  const handleAction = () => {
-    setFriendship((prev) => Math.min(prev + 0.1, 1));
+  const increaseFriendship = () => {
+    setFriendship((prev) => {
+      const next = prev + 0.1;
+      return next >= 1 ? 0 : next;
+    });
+  };
+
+  const handlePlay = () => {
+    increaseFriendship();
+  };
+
+  const handleFeed = () => {
+    increaseFriendship();
+  };
+
+  const handleWait = () => {
+    // TODO: 하드웨어와의 연동
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* 헤더 */}
       <View style={styles.header}>
         <View style={styles.headerButtons}>
           <TouchableOpacity
@@ -74,7 +88,6 @@ export default function Main() {
         <Text style={styles.menuIcon}>≡</Text>
       </View>
 
-      {/* 콘텐츠 */}
       <View style={[styles.card, { height: cardHeight }]}>
         {currentPage === "home" && (
           <>
@@ -87,14 +100,15 @@ export default function Main() {
                 <Text style={styles.progressTitle}>
                   <Text style={styles.bold}>코모</Text> 와의 친밀도
                 </Text>
-                <View style={styles.progressBarRow}>
+
+                <View style={styles.progressBarWrapper}>
                   <Image
-                    source={require("./assets/dog.png")}
-                    style={styles.miniDog}
+                    source={require("./assets/minidog.png")}
+                    style={styles.miniDogOnBar}
                   />
                   <Progress.Bar
                     progress={friendship}
-                    width={screenWidth * 0.65}
+                    width={screenWidth * 0.8}
                     height={14}
                     borderRadius={10}
                     color="#3f3023"
@@ -109,15 +123,15 @@ export default function Main() {
               </Text>
 
               <View style={styles.buttonRow}>
-                <TouchableOpacity style={styles.button} onPress={handleAction}>
+                <TouchableOpacity style={styles.button} onPress={handlePlay}>
                   <Text style={styles.emoji}>🪃</Text>
                   <Text style={styles.buttonText}>놀아주기</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.button} onPress={handleAction}>
+                <TouchableOpacity style={styles.button} onPress={handleWait}>
                   <Text style={styles.emoji}>✋</Text>
                   <Text style={styles.buttonText}>기다려</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.button} onPress={handleAction}>
+                <TouchableOpacity style={styles.button} onPress={handleFeed}>
                   <Text style={styles.emoji}>🍽️</Text>
                   <Text style={styles.buttonText}>밥주기</Text>
                 </TouchableOpacity>
@@ -137,9 +151,7 @@ export default function Main() {
 
             <View style={styles.diaryCard}>
               <Text style={styles.diaryText}>
-                오늘은 아주 기분 좋은 하루였다. 아침에 일어나 스트레칭을 하고,
-                반려로봇과 함께 하루를 시작했다. ...
-                {/* 나머지 텍스트 생략 가능 */}
+                오늘은 아직 기분 좋은 하루였다...
               </Text>
             </View>
           </View>
@@ -228,19 +240,30 @@ const styles = StyleSheet.create({
   progressTitle: {
     fontSize: 18,
     color: "#000",
-    paddingLeft: 10,
+    paddingLeft: 20,
+    paddingBottom: 3,
   },
-  progressBarRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  progressBarWrapper: {
+    width: screenWidth * 0.8,
+    alignSelf: "center",
+    justifyContent: "center",
+    position: "relative",
+    height: 48,
+  },
+  miniDogOnBar: {
+    position: "absolute",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: "#3f3023",
+    backgroundColor: "#fff",
+    zIndex: 2,
+    resizeMode: "cover",
   },
   bold: {
     fontWeight: "bold",
-  },
-  miniDog: {
-    width: 60,
-    height: 60,
-    resizeMode: "contain",
+    fontSize: 24,
   },
   motivationText: {
     fontSize: 24,
@@ -295,11 +318,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#000",
     marginTop: 4,
-  },
-  diaryDog: {
-    width: 60,
-    height: 60,
-    resizeMode: "contain",
   },
   diaryCard: {
     backgroundColor: "#F2F2F2",
