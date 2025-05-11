@@ -1,3 +1,4 @@
+from ai.application.voice_service import get_response, speech_to_text
 from fastapi import FastAPI, File, UploadFile
 from pydantic import BaseModel
 
@@ -5,12 +6,15 @@ app = FastAPI()
 
 
 class VoiceResponse(BaseModel):
-    voice: str
+    transcript: str
+    response: str
     
     
 @app.post("/voice")
 async def chat_voice(audio: UploadFile = File(..., description="WAV/MP3 file")) -> VoiceResponse:
-    return audio.filename
+    transcript = await speech_to_text(audio)
+    response = await get_response(transcript)
+    return VoiceResponse(transcript=transcript, response=response)
 
 
 class ChattingRequest(BaseModel):
