@@ -181,7 +181,21 @@ export default function Main() {
 
         {currentPage === "diary" && (
           <View style={styles.diaryContainer}>
-            <View style={styles.diaryHeader}>
+            <View style={{ flexDirection: "row" }}>
+              <Image
+                source={require("./assets/heart_como.png")}
+                style={{ width: 29, height: 20 }}
+              />
+              <Text style={{ ...styles.dateText, marginLeft: -5 }}>
+                코모의 감정 태그
+              </Text>
+              <Text
+                style={{ ...styles.dateText, marginLeft: 20, color: "grey" }}
+              >
+                #태그 #태그 #태그
+              </Text>
+            </View>
+            <View style={{ ...styles.diaryHeader, marginTop: 20 }}>
               <View>
                 <Text style={styles.dateText}>2025년 4월 30일</Text>
                 <Text style={styles.diaryTitle}>하루 일기</Text>
@@ -189,7 +203,28 @@ export default function Main() {
             </View>
 
             <View style={styles.diaryCard}>
-              <Text style={styles.diaryText}>오늘은 기분 좋은 하루였다...</Text>
+              <Text style={styles.diaryText}>...</Text>
+            </View>
+            <View style={{ ...styles.diaryHeader, marginTop: 50 }}>
+              <View>
+                <Text style={styles.dateText}>하루를 마무리하는</Text>
+                <View style={{ flexDirection: "row" }}>
+                  <Text style={styles.diaryTitle}>코모의 답장</Text>
+                  <Image
+                    source={require("./assets/food_como.png")}
+                    style={{
+                      width: 79,
+                      height: 57,
+                      marginLeft: 150,
+                      marginTop: -22,
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.diaryCard}>
+              <Text style={styles.diaryText}>...</Text>
             </View>
           </View>
         )}
@@ -343,7 +378,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 10,
   },
   dateText: {
     fontSize: 18,
