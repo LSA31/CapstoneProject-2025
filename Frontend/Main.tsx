@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
+  Switch,
 } from "react-native";
 import {
   SafeAreaView,
@@ -13,6 +14,7 @@ import {
 } from "react-native-safe-area-context";
 import * as Progress from "react-native-progress";
 import { StatusBar } from "expo-status-bar";
+import Toggle from "react-native-toggle-element";
 
 const screenWidth = Dimensions.get("window").width;
 const screenHeight = Dimensions.get("window").height;
@@ -21,6 +23,7 @@ export default function Main() {
   const insets = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<"home" | "diary">("home");
   const [friendship, setFriendship] = useState(0.4);
+  const [isTalking, setIsTalking] = useState(false);
 
   const headerHeight = 10;
   const cardHeight = screenHeight - headerHeight - insets.top - insets.bottom;
@@ -122,17 +125,53 @@ export default function Main() {
                 자신의 가능성을 믿어보세요!
               </Text>
 
+              <TouchableOpacity
+                style={{
+                  marginVertical: 10,
+                  top: 120,
+                  transform: [{ scaleX: 1.7 }, { scaleY: 1.7 }],
+                }}
+              >
+                <Switch
+                  trackColor={{ false: "#767577", true: "#715C46" }}
+                  thumbColor={isTalking ? "#443627" : "#443627"}
+                  onValueChange={() =>
+                    setIsTalking((previousState) => !previousState)
+                  }
+                  value={isTalking}
+                />
+                <Text style={styles.toggleText}>대화하기</Text>
+              </TouchableOpacity>
+
               <View style={styles.buttonRow}>
                 <TouchableOpacity style={styles.button} onPress={handlePlay}>
-                  <Text style={styles.emoji}>🪃</Text>
+                  <Image
+                    source={{
+                      uri: "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Boomerang.png",
+                    }}
+                    style={{ width: 65, height: 65 }}
+                    accessibilityLabel="Boomerang"
+                  />
                   <Text style={styles.buttonText}>놀아주기</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.button} onPress={handleWait}>
-                  <Text style={styles.emoji}>✋</Text>
+                  <Image
+                    source={{
+                      uri: "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Rightwards%20Pushing%20Hand%20Light%20Skin%20Tone.png",
+                    }}
+                    style={{ width: 65, height: 65 }}
+                    accessibilityLabel="Rightwards Pushing Hand"
+                  />
                   <Text style={styles.buttonText}>기다려</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.button} onPress={handleFeed}>
-                  <Text style={styles.emoji}>🍽️</Text>
+                  <Image
+                    source={{
+                      uri: "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Food/Fork%20and%20Knife%20with%20Plate.png",
+                    }}
+                    style={{ width: 65, height: 65 }}
+                    accessibilityLabel="Fork and Knife with Plate"
+                  />
                   <Text style={styles.buttonText}>밥주기</Text>
                 </TouchableOpacity>
               </View>
@@ -150,9 +189,7 @@ export default function Main() {
             </View>
 
             <View style={styles.diaryCard}>
-              <Text style={styles.diaryText}>
-                오늘은 아직 기분 좋은 하루였다...
-              </Text>
+              <Text style={styles.diaryText}>오늘은 기분 좋은 하루였다...</Text>
             </View>
           </View>
         )}
@@ -227,7 +264,7 @@ const styles = StyleSheet.create({
   dogImageBackground: {
     position: "absolute",
     alignSelf: "center",
-    top: -100,
+    top: -150,
     width: 700,
     height: 900,
     resizeMode: "contain",
@@ -267,7 +304,7 @@ const styles = StyleSheet.create({
   },
   motivationText: {
     fontSize: 24,
-    top: -150,
+    top: -100,
     fontWeight: "bold",
     color: "#000",
     zIndex: 1,
@@ -328,5 +365,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: "#333",
+  },
+  toggleText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#000",
+    textAlign: "center",
+    marginTop: 5,
+    marginBottom: 20,
   },
 });
