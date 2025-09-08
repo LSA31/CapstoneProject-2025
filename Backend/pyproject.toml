@@ -1,0 +1,21 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "KangJiUng",email = "woong236406@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "firebase-admin (>=7.1.0,<8.0.0)",
+    "websockets (>=15.0.1,<16.0.0)",
+    "httpx (>=0.28.1,<0.29.0)",
+    "uvicorn (>=0.35.0,<0.36.0)",
+    "fastapi (>=0.116.1,<0.117.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
