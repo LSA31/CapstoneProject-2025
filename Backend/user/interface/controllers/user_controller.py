@@ -17,8 +17,6 @@ class UserRegisterRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
-    parent_id: Optional[str] = None
-    birth_year: Optional[int] = None
 
 
 class UserLoginRequest(BaseModel):
@@ -33,12 +31,9 @@ def register_user(
 ):
     logger.info("회원가입 요청 시작")
     user = service.register(
-        user_type=req.user_type,
         name=req.name,
         email=req.email,
         password=req.password,
-        parent_id=req.parent_id,
-        birth_year=req.birth_year,
     )
     logger.info(f"회원가입 성공 uid={user.user_id}")
     return user.__dict__
