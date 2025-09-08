@@ -3,6 +3,8 @@ from dependency_injector import containers, providers
 from user.application.user_service import UserService
 from user.infra.repository.firebase_user_repo import FirebaseUserRepository
 from user.infra.auth.firebase_auth_service import FirebaseAuthService
+from diary.application.diary_service import DiaryService
+from diary.infra.repository.firebase_diary_repo import FirebaseDiaryRepository
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,4 +26,11 @@ class Container(containers.DeclarativeContainer):
         UserService,
         repo=user_repo,
         auth_service=auth_service,
+    )
+
+    diary_repo = providers.Singleton(FirebaseDiaryRepository)
+
+    diary_service = providers.Factory(
+        DiaryService,
+        repo=diary_repo,
     )
