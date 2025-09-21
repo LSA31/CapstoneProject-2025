@@ -6,6 +6,7 @@ from diary.domain.repository.diary_repo import DiaryRepository
 from typing import Optional, List
 from datetime import datetime
 
+
 class FirebaseDiaryRepository(DiaryRepository):
     def __init__(self):
         cred_path = os.getenv("FIREBASE_CREDENTIALS")
@@ -18,16 +19,18 @@ class FirebaseDiaryRepository(DiaryRepository):
         return self.db.collection("users").document(author_id).collection("diaries")
 
     def save(self, diary: Diary) -> Diary:
-        self._collection(diary.author_id).document(diary.diary_id).set({
-            "diaryId": diary.diary_id,
-            "authorId": diary.author_id,
-            "content": diary.content,
-            "advice": diary.advice,
-            "audioUrl": diary.audio_url,
-            "emoTag": diary.emo_tag,
-            "createdAt": diary.created_at.isoformat(),
-            "date": diary.date,
-        })
+        self._collection(diary.author_id).document(diary.diary_id).set(
+            {
+                "diaryId": diary.diary_id,
+                "authorId": diary.author_id,
+                "content": diary.content,
+                "advice": diary.advice,
+                "audioUrl": diary.audio_url,
+                "emoTag": diary.emo_tag,
+                "createdAt": diary.created_at.isoformat(),
+                "date": diary.date,
+            }
+        )
         return diary
 
     def get(self, author_id: str, diary_id: str) -> Optional[Diary]:
