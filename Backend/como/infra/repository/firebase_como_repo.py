@@ -3,7 +3,7 @@ from google.cloud import firestore
 from google.oauth2 import service_account
 from como.domain.como import Como
 from como.domain.repository.como_repo import ComoRepository
-from typing import Optional, List
+from typing import Optional
 
 
 class FirebaseComoRepository(ComoRepository):
@@ -18,6 +18,11 @@ class FirebaseComoRepository(ComoRepository):
         return self.db.collection("users").document(owner_id).collection("comos")
 
     def save(self, como: Como) -> Como:
+        # 유저당 1개만 유지 → 기존 문서 삭제 후 새로 저장
+        docs = self._collection(como.owner_id).stream()
+        for doc in docs:
+            doc.reference.delete()
+
         self._collection(como.owner_id).document(como.device_id).set(
             {
                 "deviceId": como.device_id,
@@ -32,28 +37,13 @@ class FirebaseComoRepository(ComoRepository):
         )
         return como
 
-    def get(self, owner_id: str, device_id: str) -> Optional[Como]:
-        doc = self._collection(owner_id).document(device_id).get()
-        if not doc.exists:
-            return None
-        data = doc.to_dict()
-        return Como(
-            device_id=data["deviceId"],
-            owner_id=data["ownerId"],
-            name=data["name"],
-            state=data["state"],
-            level=data["level"],
-            experience=data["experience"],
-            feeding_count_today=data["feeding_count_today"],
-            last_connected_at=data["last_connected_at"],
-        )
-
-    def list(self, owner_id: str) -> List[Como]:
-        docs = self._collection(owner_id).stream()
-        return [
-            Como(
-                device_id=doc.id,
-                owner_id=owner_id,
+    def get_by_owner(self, owner_id: str) -> Optional[Como]:
+        docs = self._collection(owner_id).limit(1).stream()
+        for doc in docs:
+            data = doc.to_dict()
+            return Como(
+                device_id=data["deviceId"],
+                owner_id=data["ownerId"],
                 name=data["name"],
                 state=data["state"],
                 level=data["level"],
@@ -61,9 +51,9 @@ class FirebaseComoRepository(ComoRepository):
                 feeding_count_today=data["feeding_count_today"],
                 last_connected_at=data["last_connected_at"],
             )
-            for doc in docs
-            if (data := doc.to_dict())
-        ]
+        return None
 
-    def delete(self, owner_id: str, device_id: str) -> None:
-        self._collection(owner_id).document(device_id).delete()
+    def delete_by_owner(self, owner_id: str) -> None:
+        docs = self._collection(owner_id).stream()
+        for doc in docs:
+            doc.reference.delete()

@@ -9,6 +9,7 @@ router = APIRouter(prefix="/como", tags=["como"])
 
 
 class ComoCreateRequest(BaseModel):
+    device_id: str
     name: str
 
 
@@ -24,6 +25,7 @@ def create_como(
 
     como = service.create(
         owner_id=current.uid,
+        device_id=req.device_id,
         name=req.name,
     )
     return como.__dict__

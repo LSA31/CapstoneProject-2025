@@ -9,9 +9,9 @@ class ComoService:
     def __init__(self, repo: ComoRepository):
         self.repo = repo
 
-    def create(self, owner_id: str, name: str, state: str) -> Como:
-        device_id = str(uuid.uuid4())  # 실제로는 웹소켓에서 받은 값으로 교체
+    def create(self, device_id: str, owner_id: str, name: str) -> Como:
         como = Como(
+            device_id=device_id,
             owner_id=owner_id,
             name=name,
             state="BASIC",
