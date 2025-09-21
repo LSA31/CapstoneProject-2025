@@ -1,9 +1,10 @@
+from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from dependency_injector.wiring import inject, Provide
+
+from common.context_vars import user_context
 from como.application.como_service import ComoService
 from containers import Container
-from common.context_vars import user_context
 
 router = APIRouter(prefix="/como", tags=["como"])
 

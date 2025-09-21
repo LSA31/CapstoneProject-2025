@@ -1,6 +1,7 @@
 from dataclasses import dataclass
-from enum import Enum
 from datetime import datetime
+from enum import Enum
+from typing import Optional
 
 
 class ComoState(str, Enum):
@@ -19,4 +20,6 @@ class Como:
     experience: int
     feeding_count_today: int
     last_connected_at: datetime
+    last_touch_at: Optional[datetime] = None
+    last_talk_at: Optional[datetime] = None
     state: ComoState = ComoState.BASIC
