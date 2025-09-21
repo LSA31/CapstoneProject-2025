@@ -8,3 +8,6 @@ __pycache__
 
 # Firebase service account key
 secret/
+
+# macOS
+.DS_Store
