@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from user.domain.user import User
 from user.domain.repository.user_repo import UserRepository
-from user.domain.repository.auth_service import AuthService
+from user.domain.service.auth_service import AuthService
 
 
 class UserService:

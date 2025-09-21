@@ -1,6 +1,6 @@
 import firebase_admin
 from firebase_admin import auth, credentials
-from user.domain.repository.auth_service import AuthService
+from user.domain.service.auth_service import AuthService
 
 
 class FirebaseAuthService(AuthService):
