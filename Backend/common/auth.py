@@ -1,7 +1,8 @@
-from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, HTTPException, status
-from firebase_admin import auth
 from dataclasses import dataclass
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from firebase_admin import auth
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/users/login", scheme_name="firebase_auth"

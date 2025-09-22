@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from firebase_admin import auth
+
 from common.context_vars import user_context
 
 

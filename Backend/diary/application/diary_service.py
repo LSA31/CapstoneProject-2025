@@ -1,14 +1,23 @@
+import uuid
 from datetime import datetime
+from typing import List, Optional
+
 from diary.domain.diary import Diary
 from diary.domain.repository.diary_repo import DiaryRepository
-from typing import List, Optional
-import uuid
+
 
 class DiaryService:
     def __init__(self, repo: DiaryRepository):
         self.repo = repo
 
-    def create(self, author_id: str, content: str, advice: str | None, audio_url: str | None, emo_tag: list[str]) -> Diary:
+    def create(
+        self,
+        author_id: str,
+        content: str,
+        advice: str | None,
+        audio_url: str | None,
+        emo_tag: list[str],
+    ) -> Diary:
         diary = Diary(
             diary_id=str(uuid.uuid4()),
             author_id=author_id,
@@ -17,7 +26,7 @@ class DiaryService:
             audio_url=audio_url,
             emo_tag=emo_tag,
             created_at=datetime.utcnow(),
-            date=datetime.utcnow().strftime("%Y-%m-%d")
+            date=datetime.utcnow().strftime("%Y-%m-%d"),
         )
         return self.repo.save(diary)
 

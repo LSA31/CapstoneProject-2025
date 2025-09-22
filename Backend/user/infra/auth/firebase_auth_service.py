@@ -1,5 +1,6 @@
 import firebase_admin
 from firebase_admin import auth, credentials
+
 from user.domain.service.auth_service import AuthService
 
 

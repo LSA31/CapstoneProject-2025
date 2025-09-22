@@ -1,10 +1,11 @@
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
-from containers import Container
-from user.interface.controllers.user_controller import router as user_router
-from diary.interface.controllers.diary_controller import router as diary_router
-from como.interface.controllers.como_controller import router as como_router
+
 from common.auth_middleware import create_middlewares
+from como.interface.controllers.como_controller import router as como_router
+from containers import Container
+from diary.interface.controllers.diary_controller import router as diary_router
+from user.interface.controllers.user_controller import router as user_router
 
 app = FastAPI(title="NAVI Backend", version="0.1.0")
 create_middlewares(app)

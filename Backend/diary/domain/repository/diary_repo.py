@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import List, Optional
+
 from diary.domain.diary import Diary
+
 
 class DiaryRepository(ABC):
     @abstractmethod

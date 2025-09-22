@@ -1,4 +1,5 @@
 import logging
+
 from common.context_vars import user_context
 
 log_format = "%(asctime)s %(name)s %(levelname)s:\tuser: %(user)s: %(message)s"

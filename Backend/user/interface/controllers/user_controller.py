@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
-from dependency_injector.wiring import inject, Provide
-from user.application.user_service import UserService
-from containers import Container
 from typing import Optional
 
+from dependency_injector.wiring import Provide, inject
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr
+
+from common.context_vars import user_context
 # 추가
 from common.logger import logger
-from common.context_vars import user_context
+from containers import Container
+from user.application.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
 

@@ -1,9 +1,11 @@
 import os
+from typing import Optional
+
 from google.cloud import firestore
 from google.oauth2 import service_account
-from user.domain.user import User
+
 from user.domain.repository.user_repo import UserRepository
-from typing import Optional
+from user.domain.user import User
 
 
 class FirebaseUserRepository(UserRepository):

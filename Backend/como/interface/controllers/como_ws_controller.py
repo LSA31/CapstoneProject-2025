@@ -21,7 +21,7 @@ async def hardware_ws(
         while True:
             data = await websocket.receive_json()
             device_id = data.get("deviceId")
-            event_type = data.get("event")  # "TOUCH" / "TALK" / ...
+            event_type = data.get("event")  # "TOUCH" / "TALK"
 
             if not device_id or not event_type:
                 await websocket.send_json({"error": "deviceId and event required"})
@@ -39,8 +39,6 @@ async def hardware_ws(
                 {
                     "status": "ok",
                     "event": event_type,
-                    "level": como.level,
-                    "experience": como.experience,
                 }
             )
 

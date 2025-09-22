@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from como.domain.como import Como
@@ -38,10 +38,10 @@ class ComoService:
 
         if event_type == "TOUCH":
             como.experience += 2
-            como.last_touch_at = now  # 필드 추가 필요
+            como.last_touch_at = now
         elif event_type == "TALK":
             como.experience += 2
-            como.last_talk_at = now  # 필드 추가 필요
+            como.last_talk_at = now
 
         self._check_level_up(como)
         return self.repo.save(como)
@@ -59,3 +59,30 @@ class ComoService:
             and como.experience >= thresholds[como.level - 1]
         ):
             como.level += 1
+
+    # 하루/주간 주기로 경험치 감소 적용
+    def apply_decay(self, como: Como) -> Como:
+        now = datetime.utcnow()
+
+        # 하루 단위 체크
+        if not como.last_talk_at or (now - como.last_talk_at) > timedelta(days=1):
+            como.experience -= 5  # 하루에 대화 없으면 -5XP
+
+        if not como.last_play_at or (now - como.last_play_at) > timedelta(days=1):
+            como.experience -= 5  # 하루에 놀아주기 없으면 -5XP
+
+        if not como.last_feed_at or (now - como.last_feed_at) > timedelta(days=1):
+            como.experience -= 10  # 하루에 밥 안주면 -10XP
+
+        # 주 단위 체크
+        if not como.last_touch_at or (now - como.last_touch_at) > timedelta(days=7):
+            como.experience -= 1  # 일주일간 터치 없으면 -1XP
+
+        if not como.last_walk_at or (now - como.last_walk_at) > timedelta(days=7):
+            como.experience -= 5  # 일주일간 산책 없으면 -5XP
+
+        # 경험치는 최소 0 보장
+        if como.experience < 0:
+            como.experience = 0
+
+        return self.repo.save(como)

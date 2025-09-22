@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 from uuid import UUID
+
 from user.domain.user import User
 
 
