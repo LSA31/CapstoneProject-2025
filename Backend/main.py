@@ -7,7 +7,7 @@ from containers import Container
 from diary.interface.controllers.diary_controller import router as diary_router
 from user.interface.controllers.user_controller import router as user_router
 
-app = FastAPI(title="NAVI Backend", version="0.1.0")
+app = FastAPI(title="COMO Backend", version="0.1.0")
 create_middlewares(app)
 
 container = Container()
