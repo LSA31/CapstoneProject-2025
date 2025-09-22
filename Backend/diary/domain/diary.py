@@ -9,7 +9,7 @@ class Diary:
     author_id: str
     content: str
     advice: Optional[str]
-    audio_url: Optional[str]
+    audio_url: list[str]
     emo_tag: list[str]
     created_at: datetime
     date: str

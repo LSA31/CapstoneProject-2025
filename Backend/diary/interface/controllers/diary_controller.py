@@ -12,7 +12,7 @@ router = APIRouter(prefix="/diaries", tags=["diaries"])
 class DiaryCreateRequest(BaseModel):
     content: str
     advice: str | None = None
-    audio_url: str | None = None
+    audio_url: list[str] = []
     emo_tag: list[str] = []
     date: str
 
@@ -40,10 +40,18 @@ def create_diary(
 @router.get("")
 @inject
 def list_diaries(
+    date: str | None = None,
     service: DiaryService = Depends(Provide[Container.diary_service]),
 ):
     current = user_context.get()
     if current == "Anonymous":
         raise HTTPException(status_code=401, detail="Unauthorized")
-    diaries = service.list(current.uid)
-    return [d.__dict__ for d in diaries]
+
+    if date:  # 날짜가 들어오면 특정 날짜 다이어리 조회
+        diary = service.find_by_date(current.uid, date)
+        if not diary:
+            raise HTTPException(status_code=404, detail="Diary not found for this date")
+        return diary.__dict__
+
+    # 날짜가 없으면 400 에러
+    raise HTTPException(status_code=400, detail="Date query parameter is required")

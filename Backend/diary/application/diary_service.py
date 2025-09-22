@@ -15,7 +15,7 @@ class DiaryService:
         author_id: str,
         content: str,
         advice: str | None,
-        audio_url: str | None,
+        audio_url: list[str],
         emo_tag: list[str],
     ) -> Diary:
         diary = Diary(
@@ -38,3 +38,6 @@ class DiaryService:
 
     def delete(self, author_id: str, diary_id: str) -> None:
         self.repo.delete(author_id, diary_id)
+
+    def find_by_date(self, author_id: str, date: str) -> Optional[Diary]:
+        return self.repo.find_by_date(author_id, date)

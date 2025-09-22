@@ -45,7 +45,7 @@ class FirebaseDiaryRepository(DiaryRepository):
             author_id=data["authorId"],
             content=data["content"],
             advice=data.get("advice"),
-            audio_url=data.get("audioUrl"),
+            audio_url=data.get("audioUrl", []),
             emo_tag=data.get("emoTag", []),
             created_at=datetime.fromisoformat(data["createdAt"]),
         )
@@ -58,7 +58,7 @@ class FirebaseDiaryRepository(DiaryRepository):
                 author_id=author_id,
                 content=data["content"],
                 advice=data.get("advice"),
-                audio_url=data.get("audioUrl"),
+                audio_url=data.get("audioUrl", []),
                 emo_tag=data.get("emoTag", []),
                 created_at=datetime.fromisoformat(data["createdAt"]),
             )
@@ -68,3 +68,21 @@ class FirebaseDiaryRepository(DiaryRepository):
 
     def delete(self, author_id: str, diary_id: str) -> None:
         self._collection(author_id).document(diary_id).delete()
+
+    def find_by_date(self, author_id: str, date: str) -> Optional[Diary]:
+        docs = self._collection(author_id).where("date", "==", date).stream()
+
+        for doc in docs:
+            data = doc.to_dict()
+            return Diary(
+                diary_id=doc.id,
+                author_id=author_id,
+                content=data["content"],
+                advice=data.get("advice"),
+                audio_url=data.get("audioUrl", []),
+                emo_tag=data.get("emoTag", []),
+                created_at=datetime.fromisoformat(data["createdAt"]),
+                date=data["date"],
+            )
+
+        return None
