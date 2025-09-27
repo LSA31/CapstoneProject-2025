@@ -45,7 +45,13 @@ def custom_openapi():
             "bearerFormat": "JWT",
         }
     }
-    openapi_schema["security"] = [{"BearerAuth": []}]  # 전체 엔드포인트 적용
+    openapi_schema["security"] = [{"BearerAuth": []}]
+
+    for path, methods in openapi_schema["paths"].items():
+        if path not in ["/users/register", "/users/login"]:
+            for method in methods:
+                openapi_schema["paths"][path][method]["security"] = [{"BearerAuth": []}]
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 

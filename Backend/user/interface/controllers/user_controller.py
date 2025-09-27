@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
 from common.context_vars import user_context
+
 # 추가
 from common.logger import logger
 from containers import Container
@@ -37,7 +38,7 @@ def register_user(
         password=req.password,
     )
     logger.info(f"회원가입 성공 uid={user.user_id}")
-    return user.__dict__
+    return {"message": "회원 가입이 완료되었습니다."}
 
 
 @router.post("/login")
