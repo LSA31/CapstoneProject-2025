@@ -1,11 +1,29 @@
 from dependency_injector.wiring import Provide, inject
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from enum import Enum
 
 from common.logger import logger
 from como.application.como_service import ComoService
 from containers import Container
 
 router = APIRouter(prefix="/ws", tags=["como-ws"])
+
+
+class HardwareEvent(str, Enum):
+    START = "START"
+    STOP = "STOP"
+    TALK = "TALK"
+    TALK_STOP = "TALK_STOP"
+
+
+class SendEventRequest(BaseModel):
+    device_id: str
+    event: HardwareEvent
+
+
+# 연결된 하드웨어 클라이언트 저장소 (deviceId -> WebSocket)
+connected_clients = {}
 
 
 @router.websocket("/hardware")
@@ -44,3 +62,24 @@ async def hardware_ws(
 
     except WebSocketDisconnect:
         logger.warning("하드웨어 연결 끊김")
+
+        for k, v in list(connected_clients.items()):
+            if v == websocket:
+                del connected_clients[k]
+
+
+# 서버에서 하드웨어로 이벤트 push (REST API 엔드포인트)
+# 프론트가 바로 사용가능
+@router.post("/send")
+async def send_event(req: SendEventRequest):
+    websocket = connected_clients.get(req.device_id)
+    if websocket:
+        try:
+            await websocket.send_json({"event": req.event, "fromServer": True})
+            logger.info(f"서버 → {req.device_id} 로 이벤트 전송: {req.event}")
+            return {"status": "sent", "deviceId": req.device_id, "event": req.event}
+        except Exception as e:
+            logger.error(f"전송 실패: {e}")
+            return {"error": "send failed", "detail": str(e)}
+    else:
+        return {"error": "device not connected"}

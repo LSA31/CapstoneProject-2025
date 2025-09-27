@@ -5,18 +5,24 @@ from dotenv import load_dotenv
 
 from como.application.como_service import ComoService
 from como.infra.repository.firebase_como_repo import FirebaseComoRepository
+from como.infra.ai_ws_client import AIWebSocketClient
 from diary.application.diary_service import DiaryService
 from diary.infra.repository.firebase_diary_repo import FirebaseDiaryRepository
 from user.application.user_service import UserService
 from user.infra.auth.firebase_auth_service import FirebaseAuthService
 from user.infra.repository.firebase_user_repo import FirebaseUserRepository
 
+
 load_dotenv()
 
 
 class Container(containers.DeclarativeContainer):
     wiring_config = containers.WiringConfiguration(
-        modules=["user.interface.controllers.user_controller"]
+        modules=[
+            "user.interface.controllers.user_controller",
+            "diary.interface.controllers.diary_controller",
+            "como.interface.controllers.como_controller",
+        ]
     )
 
     user_repo = providers.Singleton(FirebaseUserRepository)
@@ -43,4 +49,11 @@ class Container(containers.DeclarativeContainer):
     como_service = providers.Factory(
         ComoService,
         repo=como_repo,
+    )
+
+    ai_ws_client = providers.Singleton(
+        AIWebSocketClient,
+        url=os.getenv(
+            "AI_WS_URL", "ws://localhost:8000/ws"
+        ),  # TODO: .env 파일에 AI 웹소켓 주소 AI_WS_URL 추가
     )

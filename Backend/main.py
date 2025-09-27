@@ -3,9 +3,10 @@ from fastapi.openapi.utils import get_openapi
 
 from common.auth_middleware import create_middlewares
 from como.interface.controllers.como_controller import router as como_router
-from containers import Container
+from como.interface.controllers.como_ws_controller import router as como_ws_router
 from diary.interface.controllers.diary_controller import router as diary_router
 from user.interface.controllers.user_controller import router as user_router
+from containers import Container
 
 app = FastAPI(title="COMO Backend", version="0.1.0")
 create_middlewares(app)
@@ -27,6 +28,7 @@ def health():
 app.include_router(user_router)
 app.include_router(diary_router)
 app.include_router(como_router)
+app.include_router(como_ws_router)
 
 
 # Swagger에 BearerAuth 추가
