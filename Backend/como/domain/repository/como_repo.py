@@ -16,3 +16,15 @@ class ComoRepository(ABC):
     @abstractmethod
     def delete(self, device_id: str) -> None:
         raise NotImplementedError
+
+    @abstractmethod
+    def get_by_device_id(self, device_id: str) -> Optional[Como]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_by_owner(self, owner_id: str) -> Optional[Como]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_by_owner(self, owner_id: str) -> None:
+        raise NotImplementedError

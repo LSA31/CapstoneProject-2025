@@ -18,7 +18,7 @@ class FirebaseDiaryRepository(DiaryRepository):
         self.db = firestore.Client(credentials=credentials)
 
     def _collection(self, author_id: str):
-        return self.db.collection("users").document(author_id).collection("diaries")
+        return self.db.collection("user").document(author_id).collection("diary")
 
     def save(self, diary: Diary) -> Diary:
         self._collection(diary.author_id).document(diary.diary_id).set(
@@ -31,7 +31,7 @@ class FirebaseDiaryRepository(DiaryRepository):
                 "emoTag": diary.emo_tag,
                 "createdAt": diary.created_at.isoformat(),
                 "date": diary.date,
-            }
+            },
         )
         return diary
 

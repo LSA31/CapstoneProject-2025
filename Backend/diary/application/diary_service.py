@@ -1,4 +1,5 @@
 import uuid
+import ulid
 from datetime import datetime
 from typing import List, Optional
 
@@ -18,8 +19,18 @@ class DiaryService:
         audio_url: list[str],
         emo_tag: list[str],
     ) -> Diary:
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+
+        # 이미 오늘 다이어리가 있는지 확인
+        existing = self.repo.find_by_date(author_id, today)
+        if existing:
+            # audio_url만 append해서 업데이트
+            updated_audio = existing.audio_url + audio_url
+            existing.audio_url = updated_audio
+            return self.repo.save(existing)
+
         diary = Diary(
-            diary_id=str(uuid.uuid4()),
+            diary_id=str(ulid.new()),
             author_id=author_id,
             content=content,
             advice=advice,

@@ -17,7 +17,7 @@ class FirebaseComoRepository(ComoRepository):
         self.db = firestore.Client(credentials=credentials)
 
     def _collection(self, owner_id: str):
-        return self.db.collection("users").document(owner_id).collection("comos")
+        return self.db.collection("user").document(owner_id).collection("como")
 
     def save(self, como: Como) -> Como:
         self._collection(como.owner_id).document(como.device_id).set(
@@ -37,17 +37,36 @@ class FirebaseComoRepository(ComoRepository):
         )
         return como
 
-    def get_by_device_id(self, device_id: str) -> Optional[Como]:
-        users_ref = self.db.collection("users").stream()
+    def get(self, owner_id: str) -> Optional[Como]:
+        return self.get_by_owner(owner_id)
 
-        for user_doc in users_ref:
-            comos_ref = (
-                user_doc.reference.collection("comos")
+    def delete(self, device_id: str) -> None:
+        # device_id 기준 삭제
+        user_ref = self.db.collection("user").stream()
+        for user_doc in user_ref:
+            como_ref = (
+                user_doc.reference.collection("como")
                 .where("deviceId", "==", device_id)
                 .limit(1)
                 .stream()
             )
-            for doc in comos_ref:
+            for doc in como_ref:
+                doc.reference.delete()
+                return
+
+    def get_by_device_id(self, device_id: str) -> Optional[Como]:
+        user_ref = self.db.collection("user").stream()
+
+        for user_doc in user_ref:
+            print(f"[DEBUG] checking user {user_doc.id}")
+            como_ref = (
+                user_doc.reference.collection("como")
+                .where("deviceId", "==", device_id)
+                .limit(1)
+                .stream()
+            )
+            for doc in como_ref:
+                print(f"[DEBUG] found match: {doc.id} -> {doc.to_dict()}")
                 data = doc.to_dict()
                 return Como(
                     device_id=data["deviceId"],
