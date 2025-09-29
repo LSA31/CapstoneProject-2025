@@ -33,10 +33,9 @@ class UserService:
         )
         return self.repo.save(user)
 
-    def login(self, id_token: str) -> Optional[User]:
-        # 프론트에서 넘긴 Firebase ID 토큰 검증
-        uid = self.auth_service.verify_token(id_token)
-        return self.repo.get(uid)
+    def login(self, email: str, password: str) -> Optional[str]:
+        """Firebase에 이메일/비밀번호로 로그인 요청 후 id_token 반환"""
+        return self.auth_service.verify_user(email=email, password=password)
 
     def get(self, user_id: str) -> Optional[User]:
         if not self.repo:

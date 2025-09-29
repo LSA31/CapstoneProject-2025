@@ -22,7 +22,8 @@ class UserRegisterRequest(BaseModel):
 
 
 class UserLoginRequest(BaseModel):
-    id_token: str
+    email: EmailStr
+    password: str
 
 
 @router.post("/register")
@@ -48,12 +49,13 @@ def login_user(
     service: UserService = Depends(Provide[Container.user_service]),
 ):
     logger.info("로그인 요청 시작")
-    user = service.login(req.id_token)
-    if not user:
+    id_token = service.login(email=req.email, password=req.password)
+    if not id_token:
         logger.warning("로그인 실패")
-        raise HTTPException(401, "Invalid credentials")
-    logger.info(f"로그인 성공 uid={user.user_id}")
-    return user.__dict__
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    logger.info(f"로그인 성공 email={req.email}")
+    return {"id_token": id_token}
 
 
 @router.get("/me")
