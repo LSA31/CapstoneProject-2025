@@ -1,6 +1,7 @@
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
+from enum import Enum
 
 from google.cloud import storage
 from google.oauth2 import service_account
@@ -20,6 +21,18 @@ router = APIRouter(prefix="/como", tags=["como"])
 class ComoCreateRequest(BaseModel):
     device_id: str
     name: str
+
+
+class AppEvent(str, Enum):
+    PLAY = "PLAY"
+    FEED = "FEED"
+    WALK_START = "WALK_START"
+    WALK_STOP = "WALK_STOP"
+
+
+class AppEventRequest(BaseModel):
+    owner_id: str
+    event_type: AppEvent
 
 
 @router.post("")
@@ -112,3 +125,19 @@ async def upload_como_audio(
     )
 
     return diary.__dict__
+
+
+@router.post("/event")
+@inject
+def handle_app_event(
+    req: AppEventRequest,
+    service: ComoService = Depends(Provide[Container.como_service]),
+):
+    como = service.process_app_event(req.owner_id, req.event_type)
+    if not como:
+        return {"error": "Como not found"}
+    return {
+        "owner_id": como.owner_id,
+        "experience": como.experience,
+        "level": como.level,
+    }

@@ -60,6 +60,36 @@ class ComoService:
         ):
             como.level += 1
 
+    # 앱 이벤트 처리
+    def process_app_event(self, owner_id: str, event_type: str) -> Optional[Como]:
+        como = self.repo.get_by_owner(owner_id)
+        if not como:
+            return None
+
+        now = datetime.utcnow()
+
+        if event_type == "PLAY":
+            como.experience += 1
+            como.last_play_at = now
+
+        elif event_type == "FEED":
+            if como.feeding_count_today < 3:
+                como.experience += 5  # 하루 3회까지 +5XP
+                como.feeding_count_today += 1
+                como.last_feed_at = now
+
+        elif event_type == "WALK_START":
+            # 하루 1회만 +5XP
+            if not como.last_walk_at or como.last_walk_at.date() < now.date():
+                como.experience += 5
+                como.last_walk_at = now
+
+        elif event_type == "WALK_STOP":
+            como.last_walk_at = now  # 경험치 증가는 없음
+
+        self._check_level_up(como)
+        return self.repo.save(como)
+
     # 하루/주간 주기로 경험치 감소 적용
     def apply_decay(self, como: Como) -> Como:
         now = datetime.utcnow()
@@ -73,6 +103,7 @@ class ComoService:
 
         if not como.last_feed_at or (now - como.last_feed_at) > timedelta(days=1):
             como.experience -= 10  # 하루에 밥 안주면 -10XP
+            como.feeding_count_today = 0
 
         # 주 단위 체크
         if not como.last_touch_at or (now - como.last_touch_at) > timedelta(days=7):
