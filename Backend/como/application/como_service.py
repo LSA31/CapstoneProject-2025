@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Union
 
-from como.domain.como import Como
+from como.domain.como import Como, ComoState
 from como.domain.repository.como_repo import ComoRepository
 
 
@@ -32,7 +32,7 @@ class ComoService:
     def process_event(self, device_id: str, event_type: str) -> Optional[Como]:
         como = self.repo.get_by_device_id(device_id)
         if not como:
-            return None
+            return {"error": "Como not found"}
 
         now = datetime.utcnow()
 
@@ -61,34 +61,77 @@ class ComoService:
             como.level += 1
 
     # 앱 이벤트 처리
-    def process_app_event(self, owner_id: str, event_type: str) -> Optional[Como]:
+    def process_app_event(self, owner_id: str, event_type: str) -> Union[Como, dict]:
         como = self.repo.get_by_owner(owner_id)
         if not como:
             return None
 
         now = datetime.utcnow()
+        previous_state = como.state
+        was_hungry = previous_state == ComoState.HUNGRY
 
-        if event_type == "PLAY":
-            como.experience += 1
-            como.last_play_at = now
-
-        elif event_type == "FEED":
-            if como.feeding_count_today < 3:
-                como.experience += 5  # 하루 3회까지 +5XP
+        if event_type in ("PLAY", "FEED"):
+            if event_type == "FEED" and como.feeding_count_today < 3:
+                como.experience += 5
                 como.feeding_count_today += 1
                 como.last_feed_at = now
+            elif event_type == "PLAY":
+                como.experience += 1
+                como.last_play_at = now
+
+            como.state = ComoState.HAPPY
+            self._check_level_up(como)
+
+            response_como = self.repo.save(como)
+            response_como.was_hungry = was_hungry
+
+            # FEED일 경우엔 무조건 BASIC으로 복귀
+            if event_type == "FEED":
+                como.state = ComoState.BASIC
+            else:
+                # PLAY일 경우엔 이전 상태가 HUNGRY면 다시 HUNGRY로 복귀
+                como.state = (
+                    previous_state
+                    if previous_state == ComoState.HUNGRY
+                    else ComoState.BASIC
+                )
+
+            self.repo.save(como)
+
+            return response_como
 
         elif event_type == "WALK_START":
-            # 하루 1회만 +5XP
-            if not como.last_walk_at or como.last_walk_at.date() < now.date():
-                como.experience += 5
-                como.last_walk_at = now
+            como.last_walk_at = now
+            self.repo.save(como)
+            return como
 
+        # WALK_STOP → 산책 시간 검증
         elif event_type == "WALK_STOP":
-            como.last_walk_at = now  # 경험치 증가는 없음
+            if not como.last_walk_at:
+                return {"error": "WALK_START not initiated"}
 
-        self._check_level_up(como)
-        return self.repo.save(como)
+            walk_duration = (now - como.last_walk_at).total_seconds()
+            if walk_duration < 600:  # 10분 미만
+                return {"error": "Walk duration too short"}
+
+            # 10분 이상이면 산책 완료 처리
+            como.experience += 5
+            como.state = ComoState.WALK
+            self._check_level_up(como)
+
+            response_como = self.repo.save(como)
+
+            # 복귀
+            como.state = (
+                previous_state
+                if previous_state == ComoState.HUNGRY
+                else ComoState.BASIC
+            )
+            self.repo.save(como)
+
+            return response_como
+
+        return {"error": f"Unsupported event type: {event_type}"}
 
     # 하루/주간 주기로 경험치 감소 적용
     def apply_decay(self, como: Como) -> Como:

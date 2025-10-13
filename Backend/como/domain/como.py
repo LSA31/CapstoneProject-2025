@@ -6,7 +6,7 @@ from typing import Optional
 
 class ComoState(str, Enum):
     BASIC = "BASIC"
-    FEED = "FEED"
+    HAPPY = "HAPPY"
     WALK = "WALK"
     HUNGRY = "HUNGRY"
 

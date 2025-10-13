@@ -133,11 +133,17 @@ def handle_app_event(
     req: AppEventRequest,
     service: ComoService = Depends(Provide[Container.como_service]),
 ):
-    como = service.process_app_event(req.owner_id, req.event_type)
-    if not como:
-        return {"error": "Como not found"}
+    result = service.process_app_event(req.owner_id, req.event_type)
+
+    if isinstance(result, dict) and "error" in result:
+        return result  # 에러 그대로 전달
+
+    como = result
+
     return {
         "owner_id": como.owner_id,
         "experience": como.experience,
         "level": como.level,
+        "state": como.state.value,
+        "was_hungry": getattr(como, "was_hungry", False),
     }
