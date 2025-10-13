@@ -53,3 +53,7 @@ class FirebaseUserRepository(UserRepository):
             email=data["email"],
             created_at=data.get("createdAt"),
         )
+
+    def delete(self, user_id: str) -> None:
+        """userId 기준으로 Firestore에서 유저 삭제"""
+        self.collection.document(user_id).delete()

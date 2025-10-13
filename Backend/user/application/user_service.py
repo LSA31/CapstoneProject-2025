@@ -41,3 +41,7 @@ class UserService:
         if not self.repo:
             return None
         return self.repo.get(user_id)
+
+    def delete(self, user_id: str) -> None:
+        self.auth_service.delete_user(user_id)
+        self.repo.delete(user_id)

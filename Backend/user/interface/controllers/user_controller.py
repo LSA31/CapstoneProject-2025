@@ -75,3 +75,18 @@ def get_current_user(
 
     logger.info(f"현재 유저 정보 반환 uid={user.user_id}")
     return user.__dict__
+
+
+@router.delete("/me")
+@inject
+def delete_current_user(
+    service: UserService = Depends(Provide[Container.user_service]),
+):
+    current = user_context.get()
+    if not current or current == "Anonymous":
+        logger.warning("인증되지 않은 요청 /me 삭제 시도")
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    service.delete(current.uid)
+    logger.info(f"회원탈퇴 완료 uid={current.uid}")
+    return {"message": "회원 탈퇴가 완료되었습니다."}

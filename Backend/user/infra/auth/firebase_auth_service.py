@@ -36,3 +36,6 @@ class FirebaseAuthService(AuthService):
         if res.status_code == 200:
             return res.json()["idToken"]
         return None
+
+    def delete_user(self, user_id: str) -> None:
+        auth.delete_user(user_id)

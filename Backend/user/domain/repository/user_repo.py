@@ -20,3 +20,8 @@ class UserRepository(ABC):
     def save(self, user: User) -> User:
         """유저 저장"""
         raise NotImplementedError
+
+    @abstractmethod
+    def delete(self, user_id: str) -> None:
+        """user_id로 유저 삭제"""
+        raise NotImplementedError
