@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Union
 
 from como.domain.como import Como, ComoState
@@ -18,7 +18,7 @@ class ComoService:
             level=1,
             experience=0,
             feeding_count_today=0,
-            last_connected_at=datetime.utcnow(),
+            last_connected_at=datetime.now(timezone.utc)
         )
         return self.repo.save(como)
 
@@ -34,7 +34,7 @@ class ComoService:
         if not como:
             return {"error": "Como not found"}
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         if event_type == "TOUCH":
             como.experience += 2
@@ -66,7 +66,7 @@ class ComoService:
         if not como:
             return None
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         previous_state = como.state
         was_hungry = previous_state == ComoState.HUNGRY
 
@@ -135,7 +135,7 @@ class ComoService:
 
     # 하루/주간 주기로 경험치 감소 적용
     def apply_decay(self, como: Como) -> Como:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # 하루 단위 체크
         if not como.last_talk_at or (now - como.last_talk_at) > timedelta(days=1):

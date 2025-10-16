@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from user.domain.repository.user_repo import UserRepository
@@ -24,7 +24,7 @@ class UserService:
             display_name=name,
         )
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         user = User(
             user_id=firebase_uid,  # Firebase UID 사용
             name=name,

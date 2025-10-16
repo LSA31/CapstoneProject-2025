@@ -1,6 +1,8 @@
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
+
+from datetime import datetime, timezone
 from enum import Enum
 
 from google.cloud import storage
@@ -33,6 +35,13 @@ class AppEvent(str, Enum):
 class AppEventRequest(BaseModel):
     owner_id: str
     event_type: AppEvent
+
+
+class DialogRequest(BaseModel):
+    owner_id: str
+    device_id: str
+    user_text: str
+    assistant_text: str
 
 
 @router.post("")
@@ -147,3 +156,18 @@ def handle_app_event(
         "state": como.state.value,
         "was_hungry": getattr(como, "was_hungry", False),
     }
+
+@router.post("/dialog")
+@inject
+def save_dialog(
+    req: DialogRequest,
+    service: DiaryService = Depends(Provide[Container.diary_service]),
+):
+    """AI 대화 로그를 Diary 컬렉션의 dialog 필드에 누적 저장"""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    lines = [
+        f"user: {req.user_text}",
+        f"assistant: {req.assistant_text}",
+    ]
+    service.append_dialog(req.owner_id, today, lines)
+    return {"status": "saved", "date": today, "lines_added": len(lines)}

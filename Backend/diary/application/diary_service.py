@@ -1,6 +1,6 @@
 import uuid
 import ulid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from diary.domain.diary import Diary
@@ -19,7 +19,7 @@ class DiaryService:
         audio_url: list[str],
         emo_tag: list[str],
     ) -> Diary:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         # 이미 오늘 다이어리가 있는지 확인
         existing = self.repo.find_by_date(author_id, today)
@@ -36,8 +36,8 @@ class DiaryService:
             advice=advice,
             audio_url=audio_url,
             emo_tag=emo_tag,
-            created_at=datetime.utcnow(),
-            date=datetime.utcnow().strftime("%Y-%m-%d"),
+            created_at=datetime.now(timezone.utc),
+            date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         )
         return self.repo.save(diary)
 
@@ -52,3 +52,7 @@ class DiaryService:
 
     def find_by_date(self, author_id: str, date: str) -> Optional[Diary]:
         return self.repo.find_by_date(author_id, date)
+
+    def append_dialog(self, author_id: str, date: str, lines: list[str]):
+        """대화 한 턴을 다이어리 dialog 필드에 저장"""
+        self.repo.append_dialog(author_id, date, lines)
