@@ -91,7 +91,7 @@ class FirebaseDiaryRepository(DiaryRepository):
 
         return None
 
-    def append_dialog(self, author_id: str, date: str, lines: list[str]):
+    def append_dialog(self, author_id: str, date: str, lines: List[str]):
         """Diary 문서의 dialog 필드에 한 턴(user+assistant)을 누적 저장"""
         ref = self._collection(author_id).document(date)
 

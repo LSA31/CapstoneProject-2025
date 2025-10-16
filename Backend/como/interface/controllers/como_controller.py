@@ -33,12 +33,10 @@ class AppEvent(str, Enum):
 
 
 class AppEventRequest(BaseModel):
-    owner_id: str
     event_type: AppEvent
 
 
 class DialogRequest(BaseModel):
-    owner_id: str
     device_id: str
     user_text: str
     assistant_text: str
@@ -142,7 +140,11 @@ def handle_app_event(
     req: AppEventRequest,
     service: ComoService = Depends(Provide[Container.como_service]),
 ):
-    result = service.process_app_event(req.owner_id, req.event_type)
+    current = user_context.get()
+    if current == "Anonymous":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    result = service.process_app_event(current.uid, req.event_type)
 
     if isinstance(result, dict) and "error" in result:
         return result  # 에러 그대로 전달
@@ -163,11 +165,15 @@ def save_dialog(
     req: DialogRequest,
     service: DiaryService = Depends(Provide[Container.diary_service]),
 ):
-    """AI 대화 로그를 Diary 컬렉션의 dialog 필드에 누적 저장"""
+    current = user_context.get()
+    if current == "Anonymous":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     lines = [
         f"user: {req.user_text}",
         f"assistant: {req.assistant_text}",
     ]
-    service.append_dialog(req.owner_id, today, lines)
+    service.append_dialog(current.uid, today, lines)
     return {"status": "saved", "date": today, "lines_added": len(lines)}
