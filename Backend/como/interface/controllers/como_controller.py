@@ -175,5 +175,10 @@ def save_dialog(
         f"user: {req.user_text}",
         f"assistant: {req.assistant_text}",
     ]
-    service.append_dialog(current.uid, today, lines)
-    return {"status": "saved", "date": today, "lines_added": len(lines)}
+    service.append_dialog(current.uid, today, req.user_text, req.assistant_text)
+    return {
+        "status": "saved",
+        "date": today,
+        "user_text": req.user_text,
+        "assistant_text": req.assistant_text,
+    }
