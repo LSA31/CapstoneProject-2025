@@ -17,11 +17,6 @@ class DiaryCreateRequest(BaseModel):
     emo_tag: list[str] = []
     date: str
 
-class DialogRequest(BaseModel):
-    device_id: str
-    user_text: str
-    assistant_text: str
-
 
 @router.post("")
 @inject
@@ -61,18 +56,3 @@ def list_diaries(
 
     # 날짜가 없으면 400 에러
     raise HTTPException(status_code=400, detail="Date query parameter is required")
-
-
-@router.post("/dialog")
-@inject
-def save_dialog(
-    req: DialogRequest,
-    service: DiaryService = Depends(Provide[Container.diary_service]),
-):
-    current = user_context.get()
-    if current == "Anonymous":
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    service.append_dialog(current.uid, today, req.user_text, req.assistant_text)
-    return {"status": "saved", "date": today}
