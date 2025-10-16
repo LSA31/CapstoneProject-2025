@@ -7,6 +7,7 @@ from typing import Optional
 class Diary:
     diary_id: str
     author_id: str
+    dialog: list[str] | None = None
     content: str
     advice: Optional[str]
     audio_url: list[str]

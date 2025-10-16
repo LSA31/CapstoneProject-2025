@@ -53,6 +53,9 @@ class DiaryService:
     def find_by_date(self, author_id: str, date: str) -> Optional[Diary]:
         return self.repo.find_by_date(author_id, date)
 
-    def append_dialog(self, author_id: str, date: str, lines: list[str]):
-        """대화 한 턴을 다이어리 dialog 필드에 저장"""
+    def append_dialog(self, author_id: str, date: str, user_text: str, assistant_text: str):
+        lines = [
+            {"role": "user", "content": user_text},
+            {"role": "assistant", "content": assistant_text}
+        ]
         self.repo.append_dialog(author_id, date, lines)

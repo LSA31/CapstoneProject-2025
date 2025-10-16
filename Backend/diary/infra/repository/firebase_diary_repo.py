@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from google.cloud import firestore
@@ -25,6 +25,7 @@ class FirebaseDiaryRepository(DiaryRepository):
             {
                 "diaryId": diary.diary_id,
                 "authorId": diary.author_id,
+                "dialog": diary.dialog or [],
                 "content": diary.content,
                 "advice": diary.advice,
                 "audioUrl": diary.audio_url,
@@ -43,6 +44,7 @@ class FirebaseDiaryRepository(DiaryRepository):
         return Diary(
             diary_id=data["diaryId"],
             author_id=data["authorId"],
+            dialog=data.get("dialog", []),
             content=data["content"],
             advice=data.get("advice"),
             audio_url=data.get("audioUrl", []),
@@ -56,6 +58,7 @@ class FirebaseDiaryRepository(DiaryRepository):
             Diary(
                 diary_id=doc.id,
                 author_id=author_id,
+                dialog=data.get("dialog", []),
                 content=data["content"],
                 advice=data.get("advice"),
                 audio_url=data.get("audioUrl", []),
@@ -77,6 +80,7 @@ class FirebaseDiaryRepository(DiaryRepository):
             return Diary(
                 diary_id=doc.id,
                 author_id=author_id,
+                dialog=data.get("dialog", []),
                 content=data["content"],
                 advice=data.get("advice"),
                 audio_url=data.get("audioUrl", []),
@@ -86,3 +90,21 @@ class FirebaseDiaryRepository(DiaryRepository):
             )
 
         return None
+
+    def append_dialog(self, author_id: str, date: str, lines: list[str]):
+        """Diary 문서의 dialog 필드에 한 턴(user+assistant)을 누적 저장"""
+        ref = self._collection(author_id).document(date)
+
+        # 문서가 없으면 새로 생성
+        if not ref.get().exists:
+            ref.set({
+                "authorId": author_id,
+                "date": date,
+                "dialog": [],
+                "createdAt": datetime.now(timezone.utc).isoformat()
+            })
+
+        # Firestore ArrayUnion으로 append
+        ref.update({
+            "dialog": firestore.ArrayUnion(lines)
+        })

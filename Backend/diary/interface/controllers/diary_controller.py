@@ -1,6 +1,7 @@
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from datetime import datetime, timezone
 
 from common.context_vars import user_context
 from containers import Container
@@ -15,6 +16,12 @@ class DiaryCreateRequest(BaseModel):
     audio_url: list[str] = []
     emo_tag: list[str] = []
     date: str
+
+class DialogRequest(BaseModel):
+    owner_id: str
+    device_id: str
+    user_text: str
+    assistant_text: str
 
 
 @router.post("")
@@ -55,3 +62,14 @@ def list_diaries(
 
     # 날짜가 없으면 400 에러
     raise HTTPException(status_code=400, detail="Date query parameter is required")
+
+
+@router.post("/dialog")
+@inject
+def save_dialog(
+    req: DialogRequest,
+    service: DiaryService = Depends(Provide[Container.diary_service]),
+):
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    service.append_dialog(req.owner_id, today, req.user_text, req.assistant_text)
+    return {"status": "saved", "date": today}
