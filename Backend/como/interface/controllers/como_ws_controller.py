@@ -15,6 +15,7 @@ class HardwareEvent(str, Enum):
     STOP = "STOP"
     TALK = "TALK"
     TALK_STOP = "TALK_STOP"
+    BACK = "BACK"
 
 
 class SendEventRequest(BaseModel):
