@@ -22,6 +22,10 @@ class SendEventRequest(BaseModel):
     device_id: str
     event: HardwareEvent
 
+class AnswerRequest(BaseModel):
+    device_id: str
+    answer: str
+
 
 # 연결된 하드웨어 클라이언트 저장소 (deviceId -> WebSocket)
 connected_clients = {}
@@ -74,6 +78,7 @@ async def hardware_ws(
 @router.post("/send")
 async def send_event(req: SendEventRequest):
     websocket = connected_clients.get(req.device_id)
+
     if websocket:
         try:
             await websocket.send_json({"event": req.event, "fromServer": True})
@@ -83,4 +88,29 @@ async def send_event(req: SendEventRequest):
             logger.error(f"전송 실패: {e}")
             return {"error": "send failed", "detail": str(e)}
     else:
+        return {"error": "device not connected"}
+
+
+@router.post("/answer")
+async def send_answer(req: AnswerRequest):
+    """AI 서버에서 하드웨어로 음성 답변을 전송"""
+    websocket = connected_clients.get(req.device_id)
+
+    if websocket:
+        try:
+            # 하드웨어로 답변 전송
+            await websocket.send_json(
+                {
+                    "event": "ANSWER",
+                    "data": req.answer,
+                    "fromServer": True,
+                }
+            )
+            logger.info(f"AI 응답 전송 성공 → {req.device_id}: {req.answer}")
+            return {"status": "sent", "device_id": req.device_id}
+        except Exception as e:
+            logger.error(f"AI 응답 전송 실패: {e}")
+            return {"error": "send failed", "detail": str(e)}
+    else:
+        logger.warning(f"AI 응답 전송 실패: {req.device_id} 하드웨어 미연결 상태")
         return {"error": "device not connected"}
