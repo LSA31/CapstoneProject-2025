@@ -15,7 +15,6 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 class UserRegisterRequest(BaseModel):
-    user_type: str
     name: str
     email: EmailStr
     password: str
