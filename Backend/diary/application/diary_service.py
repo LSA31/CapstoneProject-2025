@@ -18,6 +18,7 @@ class DiaryService:
         advice: str | None,
         audio_url: list[str],
         emo_tag: list[str],
+        date: Optional[str] = None,
     ) -> Diary:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 

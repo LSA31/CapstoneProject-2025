@@ -15,7 +15,6 @@ class DiaryCreateRequest(BaseModel):
     advice: str | None = None
     audio_url: list[str] = []
     emo_tag: list[str] = []
-    date: str
 
 
 @router.post("")
@@ -33,7 +32,6 @@ def create_diary(
         advice=req.advice,
         audio_url=req.audio_url,
         emo_tag=req.emo_tag,
-        date=req.date,
     )
     return diary.__dict__
 
