@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   Dimensions,
   Switch,
+  Animated,
+  AppState,
 } from "react-native";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -15,15 +18,36 @@ import {
 import * as Progress from "react-native-progress";
 import { StatusBar } from "expo-status-bar";
 import Toggle from "react-native-toggle-element";
+import DiaryScreen from "./DiaryScreen";
 
 const screenWidth = Dimensions.get("window").width;
 const screenHeight = Dimensions.get("window").height;
+const BUTTON_WIDTH = 64;
+const BUTTON_MARGIN = 4; // marginHorizontal
+const GROUP_COUNT = 5;
+
 
 export default function MainScreen() {
   const insets = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<"home" | "diary">("home");
   const [friendship, setFriendship] = useState(0.4);
   const [isTalking, setIsTalking] = useState(false);
+  const [isFunActive, setIsFunActive] = useState(false);
+  const [isHungry, setIsHungry] = useState(false);
+
+  // animation refs for the 'fun' overlay
+  const shakeAnim = useRef(new Animated.Value(0)).current; // translateX shake
+  const funOpacity = useRef(new Animated.Value(0)).current; // fade in/out
+  const funLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const funTimeoutRef = useRef<number | null>(null);
+  // AsyncStorage key for last fed date
+  const LAST_FED_KEY = "lastFedDate";
+  // animation refs for the 'happy' overlay (used by 구해주기 & 밥주기)
+  const happyAnim = useRef(new Animated.Value(0)).current;
+  const happyOpacity = useRef(new Animated.Value(0)).current;
+  const happyLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const happyTimeoutRef = useRef<number | null>(null);
+  const [isHappyActive, setIsHappyActive] = useState(false);
 
   const headerHeight = 10;
   const cardHeight = screenHeight - headerHeight - insets.top - insets.bottom;
@@ -37,10 +61,155 @@ export default function MainScreen() {
 
   const handlePlay = () => {
     increaseFriendship();
+    startFunAnimation();
   };
+
+  const handleGoWalk = () => {
+    // 산책가기 동작: 임시로 친밀도 소폭 증가
+    setFriendship((prev) => Math.min(1, prev + 0.05));
+    // 여기에 네비게이션이나 다른 로직을 연결할 수 있습니다.
+  };
+
+  const startFunAnimation = () => {
+    // prevent multiple starts
+    if (isFunActive) return;
+    setIsFunActive(true);
+
+    // fade in
+    funOpacity.setValue(0);
+    Animated.timing(funOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+
+    // shaking loop
+    const singleShake = Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: -10, duration: 350, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 350, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -6, duration: 280, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 6, duration: 280, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]);
+
+    funLoopRef.current = Animated.loop(singleShake);
+    funLoopRef.current.start();
+
+    // stop after ~5s
+    if (funTimeoutRef.current) {
+      clearTimeout(funTimeoutRef.current);
+    }
+    // @ts-ignore - window.setTimeout return type for RN
+    funTimeoutRef.current = setTimeout(() => {
+      // stop loop
+      if (funLoopRef.current) funLoopRef.current.stop();
+      // fade out
+      Animated.timing(funOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsFunActive(false);
+        shakeAnim.setValue(0);
+      });
+    }, 5000);
+  };
+
+  const startHappyAnimation = () => {
+    if (isHappyActive) return;
+    setIsHappyActive(true);
+
+    // fade in
+    happyOpacity.setValue(0);
+    Animated.timing(happyOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start();
+
+    // same shaking loop but driven by happyAnim
+    const singleShakeHappy = Animated.sequence([
+      Animated.timing(happyAnim, { toValue: -10, duration: 350, useNativeDriver: true }),
+      Animated.timing(happyAnim, { toValue: 10, duration: 350, useNativeDriver: true }),
+      Animated.timing(happyAnim, { toValue: -6, duration: 280, useNativeDriver: true }),
+      Animated.timing(happyAnim, { toValue: 6, duration: 280, useNativeDriver: true }),
+      Animated.timing(happyAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+    ]);
+
+    happyLoopRef.current = Animated.loop(singleShakeHappy);
+    happyLoopRef.current.start();
+
+    if (happyTimeoutRef.current) clearTimeout(happyTimeoutRef.current);
+    // @ts-ignore
+    happyTimeoutRef.current = setTimeout(() => {
+      if (happyLoopRef.current) happyLoopRef.current.stop();
+      Animated.timing(happyOpacity, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setIsHappyActive(false);
+        happyAnim.setValue(0);
+      });
+    }, 5000);
+  };
+
+  const getTodayString = () => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const checkIfHungry = async () => {
+    try {
+      const last = await AsyncStorage.getItem(LAST_FED_KEY);
+      const today = getTodayString();
+      if (last === today) {
+        setIsHungry(false);
+      } else {
+        setIsHungry(true);
+      }
+    } catch (e) {
+      // ignore read errors
+      setIsHungry(true);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      // cleanup on unmount
+      if (funLoopRef.current) funLoopRef.current.stop();
+      if (happyLoopRef.current) happyLoopRef.current.stop();
+      if (funTimeoutRef.current) clearTimeout(funTimeoutRef.current);
+      if (happyTimeoutRef.current) clearTimeout(happyTimeoutRef.current);
+    };
+  }, []);
+
+  // check hunger on mount and when app comes to foreground
+  useEffect(() => {
+    checkIfHungry();
+    const sub = AppState.addEventListener("change", (next) => {
+      if (next === "active") {
+        checkIfHungry();
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   const handleFeed = () => {
     increaseFriendship();
+    startHappyAnimation();
+    // persist today's date as last fed
+    (async () => {
+      try {
+        await AsyncStorage.setItem(LAST_FED_KEY, getTodayString());
+        setIsHungry(false);
+      } catch (e) {
+        // ignore write errors
+      }
+    })();
   };
 
   const handleMove = () => {
@@ -51,6 +220,7 @@ export default function MainScreen() {
   const handleSave = () => {
     // 구해주기 동작 (임시: 친밀도 증가)
     increaseFriendship();
+    startHappyAnimation();
   };
 
   return (
@@ -101,9 +271,10 @@ export default function MainScreen() {
         {currentPage === "home" && (
           <>
             <Image
-              source={require("../assets/dog.png")}
+              source={isHungry ? require("../assets/state_hungry.png") : require("../assets/dog.png")}
               style={styles.dogImageBackground}
             />
+            
             <View style={styles.cardContent}>
               <View style={styles.progressContainer}>
                 <Text style={styles.progressTitle}>
@@ -131,6 +302,34 @@ export default function MainScreen() {
                 자신의 가능성을 믿어보세요!
               </Text>
 
+              {/* Fun overlay: appears just below the motivation text when '놀아주기' is pressed */}
+              <Animated.Image
+                source={require("../assets/state_fun.png")}
+                style={[
+                  styles.funOverlay,
+                  {
+                    transform: [{ translateY: shakeAnim }],
+                    opacity: funOpacity,
+                  },
+                ]}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              />
+
+              {/* Happy overlay: appears in same place for '구해주기' and '밥주기' */}
+              <Animated.Image
+                source={require("../assets/state_happy.png")}
+                style={[
+                  styles.funOverlay,
+                  {
+                    transform: [{ translateY: happyAnim }],
+                    opacity: happyOpacity,
+                  },
+                ]}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              />
+
               <View style={{ width: '100%', alignItems: 'center', marginVertical: 10, top: 120 }}>
                 <View style={{ transform: [{ translateX: -12 }, { scaleX: 1.7 }, { scaleY: 1.7 }], marginBottom: 6 }}>
                   <Switch
@@ -146,21 +345,31 @@ export default function MainScreen() {
               </View>
 
               <View style={styles.buttonRow}>
+                <View style={styles.buttonGroup}>
                 <TouchableOpacity style={styles.button} onPress={handlePlay}>
                   <Image
                     source={{
                       uri: "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Objects/Boomerang.png",
                     }}
-                    style={{ width: 65, height: 65 }}
+                    style={{ width: 48, height: 48 }}
                     accessibilityLabel="Boomerang"
                   />
                   <Text style={styles.buttonText}>놀아주기</Text>
                 </TouchableOpacity>
 
+                <TouchableOpacity style={styles.button} onPress={handleGoWalk}>
+                  <Image
+                    source={require("../assets/gowalk.png")}
+                    style={{ width: 48, height: 48 }}
+                    accessibilityLabel="Go Walk"
+                  />
+                  <Text style={styles.buttonText}>산책가기</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.button} onPress={handleMove}>
                   <Image
                     source={require("../assets/start.png")}
-                    style={{ width: 65, height: 65 }}
+                    style={{ width: 48, height: 48 }}
                     accessibilityLabel="Start"
                   />
                   <Text style={styles.buttonText}>움직이기</Text>
@@ -169,7 +378,7 @@ export default function MainScreen() {
                 <TouchableOpacity style={styles.button} onPress={handleSave}>
                   <Image
                     source={require("../assets/save.png")}
-                    style={{ width: 65, height: 65 }}
+                    style={{ width: 48, height: 48 }}
                     accessibilityLabel="Save"
                   />
                   <Text style={[styles.buttonText, styles.saveButtonText]}>구해주기</Text>
@@ -180,11 +389,12 @@ export default function MainScreen() {
                     source={{
                       uri: "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Food/Fork%20and%20Knife%20with%20Plate.png",
                     }}
-                    style={{ width: 65, height: 65 }}
+                    style={{ width: 48, height: 48 }}
                     accessibilityLabel="Fork and Knife with Plate"
                   />
                   <Text style={styles.buttonText}>밥주기</Text>
                 </TouchableOpacity>
+                </View>
               </View>
 
               {/* Dev buttons removed — use top-right menu icon to reload in dev */}
@@ -192,55 +402,7 @@ export default function MainScreen() {
           </>
         )}
 
-        {currentPage === "diary" && (
-          <View style={styles.diaryContainer}>
-            <View style={{ flexDirection: "row" }}>
-              <Image
-                source={require("../assets/heart_como.png")}
-                style={{ width: 29, height: 20 }}
-              />
-              <Text style={{ ...styles.dateText, marginLeft: -5 }}>
-                코모의 감정 태그
-              </Text>
-              <Text
-                style={{ ...styles.dateText, marginLeft: 20, color: "grey" }}
-              >
-                #태그 #태그 #태그
-              </Text>
-            </View>
-            <View style={{ ...styles.diaryHeader, marginTop: 20 }}>
-              <View>
-                <Text style={styles.dateText}>2025년 4월 30일</Text>
-                <Text style={styles.diaryTitle}>하루 일기</Text>
-              </View>
-            </View>
-
-            <View style={styles.diaryCard}>
-              <Text style={styles.diaryText}>...</Text>
-            </View>
-            <View style={{ ...styles.diaryHeader, marginTop: 50 }}>
-              <View>
-                <Text style={styles.dateText}>하루를 마무리하는</Text>
-                <View style={{ flexDirection: "row" }}>
-                  <Text style={styles.diaryTitle}>코모의 답장</Text>
-                  <Image
-                    source={require("../assets/food_como.png")}
-                    style={{
-                      width: 79,
-                      height: 57,
-                      marginLeft: 150,
-                      marginTop: -22,
-                    }}
-                  />
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.diaryCard}>
-              <Text style={styles.diaryText}>...</Text>
-            </View>
-          </View>
-        )}
+        {currentPage === "diary" && <DiaryScreen />}
       </View>
 
       <StatusBar style="light" />
@@ -360,62 +522,39 @@ const styles = StyleSheet.create({
   },
   buttonRow: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "center",
     width: "100%",
     zIndex: 1,
     paddingBottom: 30,
   },
+  buttonGroup: {
+    // fixed-calculated group width so the 5 buttons sit in a single centered transparent box
+    width: BUTTON_WIDTH * GROUP_COUNT + BUTTON_MARGIN * 2 * GROUP_COUNT,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignSelf: 'center',
+    backgroundColor: 'transparent',
+  },
   button: {
     backgroundColor: "#3f3023",
     borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     alignItems: "center",
-    width: 80,
+    width: 64,
+    marginHorizontal: 4,
   },
   emoji: {
     fontSize: 70,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 12,
     marginTop: 4,
     fontWeight: "600",
   },
   saveButtonText: {
     marginTop: 6,
-  },
-  diaryContainer: {
-    flex: 1,
-    padding: 24,
-    justifyContent: "flex-start",
-  },
-  diaryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  dateText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#000",
-  },
-  diaryTitle: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#000",
-    marginTop: 4,
-  },
-  diaryCard: {
-    backgroundColor: "#F2F2F2",
-    padding: 16,
-    borderRadius: 16,
-  },
-  diaryText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: "#333",
   },
   toggleText: {
     fontSize: 18,
@@ -424,5 +563,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
     marginBottom: 12,
+  },
+  funOverlay: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    resizeMode: "contain",
+    top: 135,
+    alignSelf: "center",
+    zIndex: 5,
   },
 });
