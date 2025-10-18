@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   Image,
   SafeAreaView,
   TouchableOpacity,
+  Animated,
+  Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -13,6 +15,68 @@ import { useNavigation } from '@react-navigation/native';
 export default function WalkScreen() {
   const insets = useSafeAreaInsets();
   const navigation: any = useNavigation();
+
+  // tilt animation: 0 -> 1 maps to -5deg -> +5deg
+  const tiltAnim = useRef(new Animated.Value(0)).current;
+
+  // weather state
+  const [weather, setWeather] = React.useState<any | null>(null);
+  const [locName, setLocName] = React.useState<string | null>(null);
+  const [loadingWeather, setLoadingWeather] = React.useState(false);
+
+  // Replace with your OpenWeatherMap API key
+  const OPENWEATHER_API_KEY = 'YOUR_OPENWEATHERMAP_API_KEY';
+
+  useEffect(() => {
+    // continuous one-direction rotation: 0 -> 1 maps to 0deg -> -360deg
+    const loop = Animated.loop(
+      Animated.timing(tiltAnim, {
+        toValue: 1,
+  duration: 36000, // slower: 36s per rotation
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [tiltAnim]);
+
+  // Fetch approximate location via IP as a no-permission fallback, then fetch weather
+  useEffect(() => {
+    let mounted = true;
+    const fetchWeatherData = async () => {
+      try {
+        setLoadingWeather(true);
+        // 1) get approximate location from IP (no native permission required)
+        const locRes = await fetch('https://ipapi.co/json/');
+        const locJson = await locRes.json();
+        const lat = locJson.latitude || locJson.lat;
+        const lon = locJson.longitude || locJson.lon;
+
+        // 2) fetch OpenWeatherMap current weather (metric units)
+        if (lat && lon && OPENWEATHER_API_KEY && OPENWEATHER_API_KEY !== 'YOUR_OPENWEATHERMAP_API_KEY') {
+          const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${OPENWEATHER_API_KEY}`;
+          const wRes = await fetch(url);
+          const wJson = await wRes.json();
+          if (mounted) {
+            setWeather(wJson);
+            setLocName(wJson.name || locJson.city || null);
+          }
+        } else if (mounted) {
+          // no API key provided — fall back to IP city only
+          setLocName(locJson.city || null);
+        }
+      } catch (e) {
+        // ignore errors, keep defaults
+      } finally {
+        if (mounted) setLoadingWeather(false);
+      }
+    };
+    fetchWeatherData();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const gradientStops = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9];
 
@@ -46,12 +110,53 @@ export default function WalkScreen() {
         <Text style={styles.temperature}>24°</Text>
       </View>
 
+      {/* place a walking dog image between the top center and the bottom card */}
       <View style={styles.content}>
-          <Image
-            source={require('../assets/walking.png')}
-            style={styles.image}
-            resizeMode="cover"
-          />
+        {/* walkingDog will be rendered above the ground inside bottomContainer to ensure correct stacking */}
+      </View>
+
+      {/* bottom container: rotating ground image above the weather card, pinned to screen bottom */}
+      <View style={[styles.bottomContainer, { bottom: 160 + insets.bottom }]} pointerEvents="box-none">
+        <Animated.Image
+          source={require('../assets/walkGround.png')}
+          style={[
+            styles.groundImage,
+            {
+              transform: [
+                  { translateY: 90 },
+                {
+                  rotate: tiltAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '-360deg'],
+                  }),
+                },
+              ],
+            },
+          ]}
+          resizeMode="contain"
+        />
+
+        {/* place walking dog above the rotating ground so it always appears in front */}
+        <Animated.Image
+          source={require('../assets/walkingdog.png')}
+          style={{
+            width: 200,
+            height: 160,
+            position: 'absolute',
+            bottom: 140 + insets.bottom,
+            alignSelf: 'center',
+            zIndex: 50,
+            transform: [
+              {
+                translateY: tiltAnim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [0, -24, 0],
+                }),
+              },
+            ],
+          }}
+          resizeMode="contain"
+        />
 
         <View style={styles.weatherCard}>
           <Text style={styles.weatherTitle}>산책하기 좋은 날이에요!</Text>
@@ -128,13 +233,34 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     zIndex: 5,
   },
+  walkingDog: {
+    width: 200,
+    height: 160,
+    marginTop: 28,
+    zIndex: 30,
+  },
+  bottomContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 48,
+    alignItems: 'center',
+    zIndex: 6,
+    paddingBottom: 8,
+    overflow: 'visible',
+  },
+  groundImage: {
+    width: 520,
+    height: 300,
+    marginBottom: 0,
+  },
   weatherCard: {
     backgroundColor: '#fff',
     padding: 16,
     borderRadius: 16,
     width: '86%',
     alignItems: 'flex-start',
-  marginTop: -24, // stronger pull up to sit directly under the image
+  marginTop: -20, // pulled up so the card sits closer to the rotating ground
     shadowColor: '#000',
     shadowOpacity: 0.08,
     shadowRadius: 6,
