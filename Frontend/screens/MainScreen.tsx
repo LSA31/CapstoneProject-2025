@@ -36,6 +36,8 @@ export default function MainScreen() {
   const [levelUpVisible, setLevelUpVisible] = useState(false);
   const [recentLevelUp, setRecentLevelUp] = useState<number | null>(null);
   const levelUpOpacity = useRef(new Animated.Value(0)).current;
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const drawerAnim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
   const [isTalking, setIsTalking] = useState(false);
   const [isFunActive, setIsFunActive] = useState(false);
   const [isHungry, setIsHungry] = useState(false);
@@ -121,6 +123,23 @@ export default function MainScreen() {
     } catch (e) {
       // ignore
     }
+  };
+
+  const resetLevel = async () => {
+    try {
+      setXp(0);
+      setLevel(1);
+      await AsyncStorage.setItem(XP_KEY, '0');
+      await AsyncStorage.setItem(LEVEL_KEY, '1');
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const toggleDrawer = () => {
+    const to = isDrawerOpen ? 0 : 1;
+    setIsDrawerOpen(!isDrawerOpen);
+    Animated.timing(drawerAnim, { toValue: to, duration: 300, useNativeDriver: true }).start();
   };
 
   const addXp = async (amount: number) => {
@@ -384,7 +403,9 @@ export default function MainScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.menuIcon}>≡</Text>
+        <TouchableOpacity onPress={toggleDrawer} style={{ padding: 6 }}>
+          <Text style={[styles.menuIcon, { fontSize: 30, transform: [{ translateX: -4 }, { scaleX: 1.9 }, { scaleY: 1.9 }] }]}>≡</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={[styles.card, { height: cardHeight }]}> 
@@ -534,6 +555,34 @@ export default function MainScreen() {
 
         {currentPage === "diary" && <DiaryScreen />}
       </View>
+      {/* Right drawer: animated slide from right */}
+      <Animated.View
+        pointerEvents={isDrawerOpen ? 'auto' : 'none'}
+        style={[
+          styles.rightDrawer,
+          {
+            transform: [
+              {
+                translateX: drawerAnim.interpolate({ inputRange: [0, 1], outputRange: [screenWidth, screenWidth * 0.28] }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.drawerHeader}>
+          <Text style={styles.drawerTitle}>마이페이지</Text>
+          <TouchableOpacity onPress={toggleDrawer}>
+            <Text style={styles.closeText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={{ padding: 16 }}>
+          <Text style={{ fontWeight: '700', marginBottom: 8 }}>레벨: Lv.{level}</Text>
+          <Text>XP: {xp}</Text>
+          <TouchableOpacity onPress={resetLevel} style={{ marginTop: 12, backgroundColor: '#3f3023', padding: 10, borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontWeight: '700' }}>레벨 리셋 (Lv.1)</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
 
       <StatusBar style="light" />
     </SafeAreaView>
@@ -729,5 +778,36 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: 18,
+  },
+  rightDrawer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: screenWidth * 0.72,
+    backgroundColor: '#fff',
+    zIndex: 50,
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  drawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  drawerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  closeText: {
+    fontSize: 20,
+    color: '#333',
   },
 });
