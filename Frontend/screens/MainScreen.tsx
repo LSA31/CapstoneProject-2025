@@ -19,7 +19,7 @@ import Toggle from "react-native-toggle-element";
 const screenWidth = Dimensions.get("window").width;
 const screenHeight = Dimensions.get("window").height;
 
-export default function Main() {
+export default function MainScreen() {
   const insets = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<"home" | "diary">("home");
   const [friendship, setFriendship] = useState(0.4);
@@ -43,8 +43,14 @@ export default function Main() {
     increaseFriendship();
   };
 
-  const handleWait = () => {
-    // TODO: 하드웨어와의 연동
+  const handleMove = () => {
+    // 움직이기 동작 (임시: 친밀도 증가)
+    increaseFriendship();
+  };
+
+  const handleSave = () => {
+    // 구해주기 동작 (임시: 친밀도 증가)
+    increaseFriendship();
   };
 
   return (
@@ -91,11 +97,11 @@ export default function Main() {
         <Text style={styles.menuIcon}>≡</Text>
       </View>
 
-      <View style={[styles.card, { height: cardHeight }]}>
+      <View style={[styles.card, { height: cardHeight }]}> 
         {currentPage === "home" && (
           <>
             <Image
-              source={require("./assets/dog.png")}
+              source={require("../assets/dog.png")}
               style={styles.dogImageBackground}
             />
             <View style={styles.cardContent}>
@@ -106,7 +112,7 @@ export default function Main() {
 
                 <View style={styles.progressBarWrapper}>
                   <Image
-                    source={require("./assets/minidog.png")}
+                    source={require("../assets/minidog.png")}
                     style={styles.miniDogOnBar}
                   />
                   <Progress.Bar
@@ -125,23 +131,19 @@ export default function Main() {
                 자신의 가능성을 믿어보세요!
               </Text>
 
-              <TouchableOpacity
-                style={{
-                  marginVertical: 10,
-                  top: 120,
-                  transform: [{ scaleX: 1.7 }, { scaleY: 1.7 }],
-                }}
-              >
-                <Switch
-                  trackColor={{ false: "#767577", true: "#715C46" }}
-                  thumbColor={isTalking ? "#443627" : "#443627"}
-                  onValueChange={() =>
-                    setIsTalking((previousState) => !previousState)
-                  }
-                  value={isTalking}
-                />
+              <View style={{ width: '100%', alignItems: 'center', marginVertical: 10, top: 120 }}>
+                <View style={{ transform: [{ translateX: -12 }, { scaleX: 1.7 }, { scaleY: 1.7 }], marginBottom: 6 }}>
+                  <Switch
+                    trackColor={{ false: "#767577", true: "#715C46" }}
+                    thumbColor={isTalking ? "#443627" : "#443627"}
+                    onValueChange={() =>
+                      setIsTalking((previousState) => !previousState)
+                    }
+                    value={isTalking}
+                  />
+                </View>
                 <Text style={styles.toggleText}>대화하기</Text>
-              </TouchableOpacity>
+              </View>
 
               <View style={styles.buttonRow}>
                 <TouchableOpacity style={styles.button} onPress={handlePlay}>
@@ -154,16 +156,25 @@ export default function Main() {
                   />
                   <Text style={styles.buttonText}>놀아주기</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.button} onPress={handleWait}>
+
+                <TouchableOpacity style={styles.button} onPress={handleMove}>
                   <Image
-                    source={{
-                      uri: "https://raw.githubusercontent.com/Tarikul-Islam-Anik/Animated-Fluent-Emojis/master/Emojis/Hand%20gestures/Rightwards%20Pushing%20Hand%20Light%20Skin%20Tone.png",
-                    }}
+                    source={require("../assets/start.png")}
                     style={{ width: 65, height: 65 }}
-                    accessibilityLabel="Rightwards Pushing Hand"
+                    accessibilityLabel="Start"
                   />
-                  <Text style={styles.buttonText}>기다려</Text>
+                  <Text style={styles.buttonText}>움직이기</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity style={styles.button} onPress={handleSave}>
+                  <Image
+                    source={require("../assets/save.png")}
+                    style={{ width: 65, height: 65 }}
+                    accessibilityLabel="Save"
+                  />
+                  <Text style={[styles.buttonText, styles.saveButtonText]}>구해주기</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.button} onPress={handleFeed}>
                   <Image
                     source={{
@@ -185,7 +196,7 @@ export default function Main() {
           <View style={styles.diaryContainer}>
             <View style={{ flexDirection: "row" }}>
               <Image
-                source={require("./assets/heart_como.png")}
+                source={require("../assets/heart_como.png")}
                 style={{ width: 29, height: 20 }}
               />
               <Text style={{ ...styles.dateText, marginLeft: -5 }}>
@@ -213,7 +224,7 @@ export default function Main() {
                 <View style={{ flexDirection: "row" }}>
                   <Text style={styles.diaryTitle}>코모의 답장</Text>
                   <Image
-                    source={require("./assets/food_como.png")}
+                    source={require("../assets/food_como.png")}
                     style={{
                       width: 79,
                       height: 57,
@@ -280,7 +291,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   menuIcon: {
-    fontSize: 30,
+    transform: [{ translateX: -8 }, { scaleX: 1.7 }, { scaleY: 1.7 }],
     color: "white",
   },
   card: {
@@ -345,7 +356,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#000",
     zIndex: 1,
-    textAlign: "center",
+    marginTop: 10,
   },
   buttonRow: {
     flexDirection: "row",
@@ -357,19 +368,22 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: "#3f3023",
     borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: "center",
-    width: 110,
+    width: 80,
   },
   emoji: {
     fontSize: 70,
   },
   buttonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 14,
     marginTop: 4,
     fontWeight: "600",
+  },
+  saveButtonText: {
+    marginTop: 6,
   },
   diaryContainer: {
     flex: 1,
@@ -404,11 +418,11 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   toggleText: {
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: "600",
     color: "#000",
     textAlign: "center",
-    marginTop: 5,
-    marginBottom: 20,
+    marginTop: 8,
+    marginBottom: 12,
   },
 });
