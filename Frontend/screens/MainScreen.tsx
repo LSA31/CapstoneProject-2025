@@ -26,13 +26,16 @@ const screenHeight = Dimensions.get("window").height;
 const BUTTON_WIDTH = 64;
 const BUTTON_MARGIN = 4; // marginHorizontal
 const GROUP_COUNT = 5;
-
-
 export default function MainScreen() {
   const navigation: any = useNavigation();
   const insets = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<"home" | "diary">("home");
   const [friendship, setFriendship] = useState(0.4);
+  const [xp, setXp] = useState<number>(0);
+  const [level, setLevel] = useState<number>(1);
+  const [levelUpVisible, setLevelUpVisible] = useState(false);
+  const [recentLevelUp, setRecentLevelUp] = useState<number | null>(null);
+  const levelUpOpacity = useRef(new Animated.Value(0)).current;
   const [isTalking, setIsTalking] = useState(false);
   const [isFunActive, setIsFunActive] = useState(false);
   const [isHungry, setIsHungry] = useState(false);
@@ -44,6 +47,10 @@ export default function MainScreen() {
   const funTimeoutRef = useRef<number | null>(null);
   // AsyncStorage key for last fed date
   const LAST_FED_KEY = "lastFedDate";
+  const XP_KEY = 'comox_xp';
+  const LEVEL_KEY = 'comox_level';
+  const FEED_COUNT_PREFIX = 'comox_feed_'; // use with date
+  const WALK_KEY_PREFIX = 'comox_walk_';
   // animation refs for the 'happy' overlay (used by 구해주기 & 밥주기)
   const happyAnim = useRef(new Animated.Value(0)).current;
   const happyOpacity = useRef(new Animated.Value(0)).current;
@@ -61,14 +68,111 @@ export default function MainScreen() {
     });
   };
 
+  // XP / Level system helpers
+  const deltaForLevel = (lvl: number) => {
+    // delta from level n to n+1: 10 + 5*(n-1)
+    return 10 + 5 * (lvl - 1);
+  };
+
+  const totalRequiredForLevel = (lvl: number) => {
+    // total XP required to reach level `lvl` (lvl=1 => 0)
+    let total = 0;
+    for (let l = 1; l < lvl; l++) {
+      total += deltaForLevel(l);
+    }
+    return total;
+  };
+
+  const getLevelFromXp = (totalXp: number) => {
+    let l = 1;
+    while (totalXp >= totalRequiredForLevel(l + 1)) {
+      l++;
+      // safety cap
+      if (l > 1000) break;
+    }
+    return l;
+  };
+
+  const getProgressForLevel = (totalXp: number, lvl: number) => {
+    const currentLevelTotal = totalRequiredForLevel(lvl);
+    const nextLevelTotal = totalRequiredForLevel(lvl + 1);
+    const progress = Math.max(0, Math.min(1, (totalXp - currentLevelTotal) / (nextLevelTotal - currentLevelTotal)));
+    return progress || 0;
+  };
+
+  // load persisted xp/level on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const xpRaw = await AsyncStorage.getItem(XP_KEY);
+        const levelRaw = await AsyncStorage.getItem(LEVEL_KEY);
+        if (xpRaw) setXp(parseInt(xpRaw, 10) || 0);
+        if (levelRaw) setLevel(parseInt(levelRaw, 10) || 1);
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, []);
+
+  const persistXpLevel = async (newXp: number, newLevel: number) => {
+    try {
+      await AsyncStorage.setItem(XP_KEY, String(newXp));
+      await AsyncStorage.setItem(LEVEL_KEY, String(newLevel));
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const addXp = async (amount: number) => {
+    setXp((prevXp) => {
+      const updated = prevXp + amount;
+      const newLevel = getLevelFromXp(updated);
+      if (newLevel > level) {
+        setLevel(newLevel);
+        setRecentLevelUp(newLevel);
+        // show toast
+        setLevelUpVisible(true);
+        Animated.timing(levelUpOpacity, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+        // auto-hide
+        setTimeout(() => {
+          Animated.timing(levelUpOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+            setLevelUpVisible(false);
+            setRecentLevelUp(null);
+          });
+        }, 2000);
+        // celebrate level up
+        startHappyAnimation();
+      }
+      // persist
+      persistXpLevel(updated, newLevel);
+      return updated;
+    });
+  };
+
   const handlePlay = () => {
     increaseFriendship();
     startFunAnimation();
+    // 놀아주기: +1 XP
+    addXp(1);
   };
 
   const handleGoWalk = () => {
     // 산책가기 동작: 임시로 친밀도 소폭 증가
     setFriendship((prev) => Math.min(1, prev + 0.05));
+    // 산책은 하루 1회 +5XP
+    (async () => {
+      const today = getTodayString();
+      const key = WALK_KEY_PREFIX + today;
+      try {
+        const v = await AsyncStorage.getItem(key);
+        if (!v) {
+          await AsyncStorage.setItem(key, '1');
+          addXp(5);
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
     // navigate to Walk screen
     navigation.navigate('Walk');
   };
@@ -209,6 +313,15 @@ export default function MainScreen() {
       try {
         await AsyncStorage.setItem(LAST_FED_KEY, getTodayString());
         setIsHungry(false);
+        // feed count limit 3/day: key per date
+        const today = getTodayString();
+        const feedKey = FEED_COUNT_PREFIX + today;
+        const raw = await AsyncStorage.getItem(feedKey);
+        const count = raw ? parseInt(raw, 10) : 0;
+        if (count < 3) {
+          await AsyncStorage.setItem(feedKey, String(count + 1));
+          addXp(5);
+        }
       } catch (e) {
         // ignore write errors
       }
@@ -218,12 +331,16 @@ export default function MainScreen() {
   const handleMove = () => {
     // 움직이기 동작 (임시: 친밀도 증가)
     increaseFriendship();
+    // 움직이기: 소폭 XP
+    addXp(1);
   };
 
   const handleSave = () => {
     // 구해주기 동작 (임시: 친밀도 증가)
     increaseFriendship();
     startHappyAnimation();
+    // 구해주기: +2XP
+    addXp(2);
   };
 
   return (
@@ -280,9 +397,12 @@ export default function MainScreen() {
             
             <View style={styles.cardContent}>
               <View style={styles.progressContainer}>
-                <Text style={styles.progressTitle}>
-                  <Text style={styles.bold}>코모</Text> 와의 친밀도
-                </Text>
+                <View style={styles.progressTitleRow}>
+                  <Text style={styles.progressTitle}>
+                    <Text style={styles.bold}>코모</Text> 와의 친밀도
+                  </Text>
+                  <Text style={styles.levelText}>Lv.{level}</Text>
+                </View>
 
                 <View style={styles.progressBarWrapper}>
                   <Image
@@ -290,7 +410,7 @@ export default function MainScreen() {
                     style={styles.miniDogOnBar}
                   />
                   <Progress.Bar
-                    progress={friendship}
+                    progress={getProgressForLevel(xp, level)}
                     width={screenWidth * 0.8}
                     height={14}
                     borderRadius={10}
@@ -298,12 +418,19 @@ export default function MainScreen() {
                     unfilledColor="#ccc"
                     borderWidth={0}
                   />
+
                 </View>
               </View>
 
               <Text style={styles.motivationText}>
                 자신의 가능성을 믿어보세요!
               </Text>
+
+              {levelUpVisible && recentLevelUp !== null && (
+                <Animated.View style={[styles.levelUpToast, { opacity: levelUpOpacity }]} pointerEvents="none">
+                  <Text style={styles.levelUpText}>레벨업! Lv.{recentLevelUp}</Text>
+                </Animated.View>
+              )}
 
               {/* Fun overlay: appears just below the motivation text when '놀아주기' is pressed */}
               <Animated.Image
@@ -575,5 +702,32 @@ const styles = StyleSheet.create({
     top: 135,
     alignSelf: "center",
     zIndex: 5,
+  },
+  progressTitleRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  levelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#3f3023',
+  },
+  levelUpToast: {
+    position: 'absolute',
+    top: '40%',
+    alignSelf: 'center',
+    backgroundColor: 'rgba(63,48,35,0.95)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+    zIndex: 40,
+  },
+  levelUpText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 18,
   },
 });
