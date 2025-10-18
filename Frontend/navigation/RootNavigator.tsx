@@ -9,6 +9,7 @@ import TutorialScreen3 from "../screens/TutorialScreen3";
 import TutorialScreen4 from "../screens/TutorialScreen4";
 import TutorialScreen5 from "../screens/TutorialScreen5";
 import TutorialScreen6 from "../screens/TutorialScreen6";
+import WalkScreen from "../screens/WalkScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +25,7 @@ export default function RootNavigator() {
 				<Stack.Screen name="Tutorial5" component={TutorialScreen5} />
 				<Stack.Screen name="Tutorial6" component={TutorialScreen6} />
 				<Stack.Screen name="MainApp" component={Main} />
+				<Stack.Screen name="Walk" component={WalkScreen} />
 			</Stack.Navigator>
 		</NavigationContainer>
 	);

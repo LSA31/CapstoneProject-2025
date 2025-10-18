@@ -10,6 +10,7 @@ import {
   Animated,
   AppState,
 } from "react-native";
+import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   SafeAreaView,
@@ -28,6 +29,7 @@ const GROUP_COUNT = 5;
 
 
 export default function MainScreen() {
+  const navigation: any = useNavigation();
   const insets = useSafeAreaInsets();
   const [currentPage, setCurrentPage] = useState<"home" | "diary">("home");
   const [friendship, setFriendship] = useState(0.4);
@@ -67,7 +69,8 @@ export default function MainScreen() {
   const handleGoWalk = () => {
     // 산책가기 동작: 임시로 친밀도 소폭 증가
     setFriendship((prev) => Math.min(1, prev + 0.05));
-    // 여기에 네비게이션이나 다른 로직을 연결할 수 있습니다.
+    // navigate to Walk screen
+    navigation.navigate('Walk');
   };
 
   const startFunAnimation = () => {
