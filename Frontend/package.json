@@ -5,11 +5,13 @@
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "ios-build": "react-native bundle —entry-file='index.js' —bundle-output='./ios/main.jsbundle' —dev=false —platform='ios'"
   },
   "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/native": "^7.1.8",
     "@react-navigation/native-stack": "^7.3.12",
     "expo": "~53.0.9",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@react-native-community/cli": "^20.0.2",
     "@types/react": "~19.0.10",
     "typescript": "~5.8.3"
   },
