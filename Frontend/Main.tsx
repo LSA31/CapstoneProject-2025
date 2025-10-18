@@ -175,6 +175,8 @@ export default function Main() {
                   <Text style={styles.buttonText}>밥주기</Text>
                 </TouchableOpacity>
               </View>
+
+              {/* Dev buttons removed — use top-right menu icon to reload in dev */}
             </View>
           </>
         )}

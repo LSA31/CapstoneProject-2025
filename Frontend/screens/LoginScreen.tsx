@@ -17,23 +17,8 @@ export default function LoginScreen({ navigation }: any) {
   const [password, setPassword] = useState("");
 
   const handleLogin = () => {
-    // 임시: 로그인 로직 추가 필요
-    // 예: 인증 성공 시 튜토리얼 플로우 또는 메인으로 이동
-    (async () => {
-      try {
-        const AsyncStorage = await import("@react-native-async-storage/async-storage");
-        const seen = await AsyncStorage.default.getItem("hasSeenTutorial");
-        if (!seen) {
-          navigation.replace("Tutorial");
-          return;
-        }
-      } catch (err) {
-        // AsyncStorage가 없으면 바로 메인으로 보냄(개발 환경 용)
-        console.warn("AsyncStorage not available; skipping tutorial check.", err);
-      }
-
-      navigation.replace("MainApp");
-    })();
+    // DEV: force tutorial for testing
+    navigation.replace("Tutorial1");
   };
 
   const handleSignup = () => {
@@ -86,6 +71,8 @@ export default function LoginScreen({ navigation }: any) {
         <TouchableOpacity style={styles.secondaryButton} onPress={handleSignup}>
           <Text style={styles.secondaryButtonText}>회원가입</Text>
         </TouchableOpacity>
+
+        {/* Dev buttons moved to Main screen for convenience */}
       </View>
     </SafeAreaView>
   );
@@ -159,5 +146,17 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 20,
     fontWeight: "600",
+  },
+  debugButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    alignItems: "center",
+  },
+  debugButtonText: {
+    color: "#333",
+    fontSize: 14,
   },
 });
