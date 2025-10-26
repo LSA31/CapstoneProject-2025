@@ -64,6 +64,7 @@ class FirebaseDiaryRepository(DiaryRepository):
                 audio_url=data.get("audioUrl", []),
                 emo_tag=data.get("emoTag", []),
                 created_at=datetime.fromisoformat(data["createdAt"]),
+                date=data.get("date", ""),
             )
             for doc in docs
             if (data := doc.to_dict())
@@ -97,14 +98,14 @@ class FirebaseDiaryRepository(DiaryRepository):
 
         # 문서가 없으면 새로 생성
         if not ref.get().exists:
-            ref.set({
-                "authorId": author_id,
-                "date": date,
-                "dialog": [],
-                "createdAt": datetime.now(timezone.utc).isoformat()
-            })
+            ref.set(
+                {
+                    "authorId": author_id,
+                    "date": date,
+                    "dialog": [],
+                    "createdAt": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
         # Firestore ArrayUnion으로 append
-        ref.update({
-            "dialog": firestore.ArrayUnion(lines)
-        })
+        ref.update({"dialog": firestore.ArrayUnion(lines)})
