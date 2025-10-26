@@ -38,7 +38,20 @@ def create_diary(
 
 @router.get("")
 @inject
-def list_diaries(
+def list_all_diaries(
+    service: DiaryService = Depends(Provide[Container.diary_service]),
+):
+    current = user_context.get()
+    if current == "Anonymous":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    diaries = service.list(current.uid)
+    return [d.__dict__ for d in diaries]
+
+
+@router.get("/today")
+@inject
+def get_today_diary(
     date: str | None = None,
     service: DiaryService = Depends(Provide[Container.diary_service]),
 ):
@@ -46,11 +59,11 @@ def list_diaries(
     if current == "Anonymous":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if date:  # 날짜가 들어오면 특정 날짜 다이어리 조회
-        diary = service.find_by_date(current.uid, date)
-        if not diary:
-            raise HTTPException(status_code=404, detail="Diary not found for this date")
-        return diary.__dict__
+    # date 파라미터 없으면 오늘 날짜로 기본 설정
+    target_date = date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-    # 날짜가 없으면 400 에러
-    raise HTTPException(status_code=400, detail="Date query parameter is required")
+    diary = service.find_by_date(current.uid, target_date)
+    if not diary:
+        raise HTTPException(status_code=404, detail="Diary not found for this date")
+
+    return diary.__dict__
