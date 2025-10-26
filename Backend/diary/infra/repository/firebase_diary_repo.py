@@ -59,7 +59,7 @@ class FirebaseDiaryRepository(DiaryRepository):
                 diary_id=doc.id,
                 author_id=author_id,
                 dialog=data.get("dialog", []),
-                content=data["content"],
+                content=data.get("content", ""),
                 advice=data.get("advice"),
                 audio_url=data.get("audioUrl", []),
                 emo_tag=data.get("emoTag", []),
