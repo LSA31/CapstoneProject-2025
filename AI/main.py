@@ -1,18 +1,22 @@
 from ai.application.summay_service import create_summary_diary
-from ai.application.voice_service import get_response, speech_to_text
+from ai.application.voice_service import get_response, fetch_audio, speech_to_text
 from fastapi import FastAPI, File, UploadFile
 from pydantic import BaseModel
 
 app = FastAPI()
 
-
+class VoiceRequest(BaseModel):
+    diaryId: str
+    audioUrl: str
+    
 class VoiceResponse(BaseModel):
     transcript: str
     response: str
     
     
-@app.post("/voice")
-async def chat_voice(audio: UploadFile = File(..., description="WAV/MP3 file")) -> VoiceResponse:
+@app.websocket("/ws/voice")
+async def chat_voice(request: VoiceRequest) -> VoiceResponse:
+    audio = await fetch_audio(request.audioUrl)
     transcript = await speech_to_text(audio)
     response = await get_response(transcript)
     return VoiceResponse(transcript=transcript, response=response)

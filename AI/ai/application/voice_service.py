@@ -10,6 +10,11 @@ client = OpenAI(
 )
 
 
+async def fetch_audio(audio_url: str) -> UploadFile:
+    response = requests.get(audio_url)
+    return UploadFile(file=io.BytesIO(response.content), filename=audio_url.split("/")[-1])
+
+
 async def speech_to_text(audio: UploadFile) -> str:
     content = await audio.read()
     
