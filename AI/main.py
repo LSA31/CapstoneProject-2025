@@ -41,7 +41,7 @@ async def chat_voice(websocket: WebSocket):
         
         print(f"{transcript} -> {response}")
         requests.post(
-            "http://localhost:8080/como/dialog",
+            "http://3.37.114.206:8080/como/dialog",
             headers={"Authorization": f"Bearer {payload['userId']}"},  # Fixed quotes
             json={
                 "device_id": "string",
