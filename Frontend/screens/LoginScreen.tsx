@@ -7,24 +7,87 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { loginUser, getProfile } from '../services/users';
+import { getDeviceId } from '../utils/device';
+import { createComo, hasCreatedComo, markCreatedFlag } from '../services/como';
 
 const { width } = Dimensions.get("window");
 
 export default function LoginScreen({ navigation }: any) {
-  const [id, setId] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // DEV: force tutorial for testing
-    navigation.replace("Tutorial1");
+  const handleLogin = async () => {
+    if (!email || !password) return;
+    try {
+      setLoading(true);
+      const data = await loginUser({ email, password });
+      // expect { id_token }
+      const token = data?.id_token || data?.token || data?.accessToken;
+      if (token) {
+        await AsyncStorage.setItem('accessToken', token);
+        // Ensure a Como exists for this user on first login (store a local flag to avoid duplicates)
+        try {
+          const created = await hasCreatedComo();
+          if (!created) {
+            // try to get user's name from profile endpoint; fall back to email local-part
+            let name = email.split('@')[0];
+            try {
+              const profile = await getProfile();
+              if (profile && profile.name) name = profile.name;
+            } catch (e) {
+              // profile may not be available; continue with fallback name
+            }
+            try {
+              const deviceId = await getDeviceId();
+              await createComo({ device_id: deviceId, name });
+              await markCreatedFlag();
+            } catch (e) {
+              // ignore création errors but continue
+              console.warn('createComo failed', e);
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+
+        // If the user hasn't completed the tutorial, show it once on first login.
+        try {
+          const seen = await AsyncStorage.getItem('hasSeenTutorial');
+          if (!seen || seen !== 'true') {
+            navigation.replace('Tutorial1');
+            return;
+          }
+        } catch (e) {
+          // ignore and proceed to main app
+        }
+        // navigate to main app
+        navigation.replace('MainApp');
+      } else {
+        throw new Error('토큰을 받지 못했습니다.');
+      }
+    } catch (e: any) {
+      console.warn('login failed', e);
+      const code = e?.code;
+      const msg = e?.message || '로그인 중 오류가 발생했습니다.';
+      if (code === 'INVALID_CREDENTIALS') {
+        alert('이메일 또는 비밀번호가 올바르지 않습니다.');
+      } else {
+        alert(String(msg));
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignup = () => {
-    // 회원가입 화면이 있다면 이동, 없으면 placeholder
-    // navigation.navigate('Signup');
-    console.log("회원가입 클릭");
+    // 이동: Signup 화면으로
+    navigation.navigate('Signup');
   };
 
   return (
@@ -41,13 +104,15 @@ export default function LoginScreen({ navigation }: any) {
       </View>
 
       <View style={styles.form}>
-        <Text style={styles.label}>아이디</Text>
+        <Text style={styles.label}>이메일</Text>
         <TextInput
-          placeholder="예) comolove1234"
+          placeholder="email@example.com"
           placeholderTextColor="#cfcfcf"
           style={styles.input}
-          value={id}
-          onChangeText={setId}
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
         />
 
         <Text style={{ ...styles.label, marginTop: 32 }}>비밀번호</Text>
@@ -61,11 +126,15 @@ export default function LoginScreen({ navigation }: any) {
         />
 
         <TouchableOpacity
-          style={[styles.primaryButton, password && id ? {} : styles.disabled]}
+          style={[styles.primaryButton, password && email ? {} : styles.disabled]}
           onPress={handleLogin}
-          disabled={!password || !id}
+          disabled={!password || !email || loading}
         >
-          <Text style={styles.primaryButtonText}>로그인</Text>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.primaryButtonText}>로그인</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.secondaryButton} onPress={handleSignup}>
@@ -122,7 +191,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   primaryButton: {
-    backgroundColor: "#d9d9d9",
+    backgroundColor: "#3f3023",
     marginTop: 40,
     paddingVertical: 18,
     borderRadius: 12,
@@ -130,7 +199,8 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 20,
+    fontWeight: "600",
   },
   disabled: {
     opacity: 0.6,

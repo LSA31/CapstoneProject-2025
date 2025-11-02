@@ -20,6 +20,11 @@ import * as Progress from "react-native-progress";
 import { StatusBar } from "expo-status-bar";
 import Toggle from "react-native-toggle-element";
 import DiaryScreen from "./DiaryScreen";
+import { sendEvent } from '../services/event';
+import { sendHardwareEvent } from '../services/hardware';
+import { getDeviceId } from '../utils/device';
+import { getComo } from '../services/como';
+import { endWalk } from '../services/walk';
 
 const screenWidth = Dimensions.get("window").width;
 const screenHeight = Dimensions.get("window").height;
@@ -33,6 +38,8 @@ export default function MainScreen() {
   const [friendship, setFriendship] = useState(0.4);
   const [xp, setXp] = useState<number>(0);
   const [level, setLevel] = useState<number>(1);
+  const [petName, setPetName] = useState<string>('코모');
+  const [barWidth, setBarWidth] = useState<number>(0);
   const [levelUpVisible, setLevelUpVisible] = useState(false);
   const [recentLevelUp, setRecentLevelUp] = useState<number | null>(null);
   const levelUpOpacity = useRef(new Animated.Value(0)).current;
@@ -45,6 +52,8 @@ export default function MainScreen() {
   // animation refs for the 'fun' overlay
   const shakeAnim = useRef(new Animated.Value(0)).current; // translateX shake
   const funOpacity = useRef(new Animated.Value(0)).current; // fade in/out
+  const dogPosAnim = useRef(new Animated.Value(0)).current;
+  const DOG_SIZE = 40;
   const funLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const funTimeoutRef = useRef<number | null>(null);
   // AsyncStorage key for last fed date
@@ -53,12 +62,55 @@ export default function MainScreen() {
   const LEVEL_KEY = 'comox_level';
   const FEED_COUNT_PREFIX = 'comox_feed_'; // use with date
   const WALK_KEY_PREFIX = 'comox_walk_';
+  const WALK_ACTIVE_KEY = 'comox_walk_active';
   // animation refs for the 'happy' overlay (used by 구해주기 & 밥주기)
   const happyAnim = useRef(new Animated.Value(0)).current;
   const happyOpacity = useRef(new Animated.Value(0)).current;
   const happyLoopRef = useRef<Animated.CompositeAnimation | null>(null);
   const happyTimeoutRef = useRef<number | null>(null);
   const [isHappyActive, setIsHappyActive] = useState(false);
+  const [isWalkingActive, setIsWalkingActive] = useState(false);
+
+  // local quotes array for MainScreen - rotates on mount / when app becomes active
+  const QUOTES = [
+    '작은 발걸음이 큰 변화를 만든다.',
+    '오늘의 노력이 내일의 나를 만든다.',
+    '실패는 성공의 어머니다. 다시 도전해보자.',
+    '포기하지 않으면 가능성은 계속된다.',
+    '한 걸음 더 나아가는 용기가 필요하다.',
+    '너는 이미 충분히 잘하고 있어.',
+    '하루의 시작은 작은 감사에서 온다.',
+    '지금의 나를 인정해 주는 하루가 되길.',
+    '성장은 불편함에서 시작된다.',
+    '오늘의 선택이 내일의 결과를 만든다.'
+  ];
+  const [quote, setQuote] = useState<string>('');
+
+  const pickRandomQuote = (prev?: string) => {
+    if (QUOTES.length === 0) return;
+    let next = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+    // avoid immediate repeat when possible
+    if (prev && QUOTES.length > 1) {
+      let attempts = 0;
+      while (next === prev && attempts < 5) {
+        next = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+        attempts++;
+      }
+    }
+    setQuote(next);
+  };
+
+  // pick initial quote on mount and whenever app becomes active
+  useEffect(() => {
+    pickRandomQuote();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        pickRandomQuote(quote);
+      }
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const headerHeight = 10;
   const cardHeight = screenHeight - headerHeight - insets.top - insets.bottom;
@@ -98,8 +150,19 @@ export default function MainScreen() {
   const getProgressForLevel = (totalXp: number, lvl: number) => {
     const currentLevelTotal = totalRequiredForLevel(lvl);
     const nextLevelTotal = totalRequiredForLevel(lvl + 1);
-    const progress = Math.max(0, Math.min(1, (totalXp - currentLevelTotal) / (nextLevelTotal - currentLevelTotal)));
+    const denom = nextLevelTotal - currentLevelTotal || 1; // avoid div by zero
+    const progress = Math.max(0, Math.min(1, (totalXp - currentLevelTotal) / denom));
     return progress || 0;
+  };
+
+  // Convenience helpers that mirror backend logic for thresholds.
+  const xpForNextLevel = (totalXp: number, lvl: number) => {
+    const nextLevelTotal = totalRequiredForLevel(lvl + 1);
+    return nextLevelTotal;
+  };
+
+  const xpForCurrentLevel = (lvl: number) => {
+    return totalRequiredForLevel(lvl);
   };
 
   // load persisted xp/level on mount
@@ -110,11 +173,115 @@ export default function MainScreen() {
         const levelRaw = await AsyncStorage.getItem(LEVEL_KEY);
         if (xpRaw) setXp(parseInt(xpRaw, 10) || 0);
         if (levelRaw) setLevel(parseInt(levelRaw, 10) || 1);
+        // try to fetch current Como info from server
+        try {
+          const c = await getComo();
+          if (c) {
+            if (c.name) setPetName(c.name);
+            if (typeof c.experience === 'number') {
+              setXp(c.experience);
+              const newLevel = getLevelFromXp(c.experience);
+              setLevel(newLevel);
+              await persistXpLevel(c.experience, newLevel);
+            }
+            if (typeof c.level === 'number') {
+              setLevel(c.level);
+              await AsyncStorage.setItem(LEVEL_KEY, String(c.level));
+            }
+            // sync hunger state if server provides it
+            try {
+              if (typeof c.state === 'string') {
+                const s = c.state.toUpperCase();
+                if (s === 'HUNGRY') {
+                  await AsyncStorage.removeItem(LAST_FED_KEY);
+                  setIsHungry(true);
+                } else {
+                  // consider any non-HUNGRY state as not hungry and persist today's fed marker
+                  await AsyncStorage.setItem(LAST_FED_KEY, (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })());
+                  setIsHungry(false);
+                }
+              }
+            } catch (ee) {
+              // ignore storage sync errors
+            }
+          }
+        } catch (e) {
+          // ignore fetch errors
+        }
       } catch (e) {
         // ignore
       }
     })();
+    // initial position will be set by xp/level effect once layout (barWidth) is known
   }, []);
+
+  // refresh xp/level/was_hungry when screen gains focus (after events like walk end)
+  useEffect(() => {
+    const unsub = (navigation as any).addListener?.('focus', async () => {
+      try {
+        // refresh from server if possible
+        try {
+          const c = await getComo();
+          if (c) {
+            if (c.name) setPetName(c.name);
+            if (typeof c.experience === 'number') {
+              setXp(c.experience);
+              const newLevel = getLevelFromXp(c.experience);
+              setLevel(newLevel);
+              await persistXpLevel(c.experience, newLevel);
+            }
+            if (typeof c.level === 'number') {
+              setLevel(c.level);
+              await AsyncStorage.setItem(LEVEL_KEY, String(c.level));
+            }
+          }
+        } catch (err) {
+          // fallback to persisted values
+          const xpRaw = await AsyncStorage.getItem(XP_KEY);
+          const levelRaw = await AsyncStorage.getItem(LEVEL_KEY);
+          if (xpRaw) setXp(parseInt(xpRaw, 10) || 0);
+          if (levelRaw) setLevel(parseInt(levelRaw, 10) || 1);
+        }
+
+        const lastFed = await AsyncStorage.getItem(LAST_FED_KEY);
+        const today = (() => {
+          const d = new Date();
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        })();
+        setIsHungry(lastFed !== today);
+        // load walk active flag
+        try {
+          const wa = await AsyncStorage.getItem(WALK_ACTIVE_KEY);
+          setIsWalkingActive(!!wa);
+        } catch (e) {
+          // ignore
+        }
+        // dog position will be animated by xp/level effect (depends on barWidth)
+      } catch (e) {
+        // ignore
+      }
+    });
+    return () => unsub && unsub();
+  }, [navigation, xp, level]);
+
+  // whenever xp/level changes, animate the dog position along the bar
+  useEffect(() => {
+    try {
+      const BAR_WIDTH = barWidth > 0 ? barWidth : screenWidth * 0.8;
+      const target = (BAR_WIDTH - DOG_SIZE) * getProgressForLevel(xp, level);
+      // if barWidth is not yet measured, setValue to avoid animation jump on first layout
+      if (barWidth > 0) {
+        Animated.timing(dogPosAnim, { toValue: target, duration: 300, useNativeDriver: true }).start();
+      } else {
+        dogPosAnim.setValue(target);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [xp, level, barWidth]);
 
   const persistXpLevel = async (newXp: number, newLevel: number) => {
     try {
@@ -140,6 +307,54 @@ export default function MainScreen() {
     const to = isDrawerOpen ? 0 : 1;
     setIsDrawerOpen(!isDrawerOpen);
     Animated.timing(drawerAnim, { toValue: to, duration: 300, useNativeDriver: true }).start();
+  };
+
+  const TUTORIAL_DONE_KEY = 'hasSeenTutorial';
+
+  const handleLogout = async () => {
+    try {
+      // simple logout: clear relevant keys and navigate to Login
+      await AsyncStorage.removeItem(XP_KEY);
+      await AsyncStorage.removeItem(LEVEL_KEY);
+      await AsyncStorage.removeItem(LAST_FED_KEY);
+      // optionally clear all (be conservative)
+      // await AsyncStorage.clear();
+      // navigate to Login screen if exists
+      navigation.navigate('Login' as any);
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  // Force hungry - clears last fed and marks hungry
+  const setHungryNow = async () => {
+    try {
+      await AsyncStorage.removeItem(LAST_FED_KEY);
+      setIsHungry(true);
+      // optional: clear today's feed count key to allow feeding again
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleReplayTutorial = async () => {
+    try {
+      // Clear the same key used by Login/Tutorial screens so replay works
+      await AsyncStorage.removeItem(TUTORIAL_DONE_KEY);
+      // navigate to tutorial start (replace stack so user starts fresh)
+      navigation.replace('Tutorial1' as any);
+      // close drawer if open
+      if (isDrawerOpen) toggleDrawer();
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleEditProfile = () => {
+    // placeholder: if profile screen exists, navigate; otherwise show an alert/modal
+    if ((navigation as any).navigate) {
+      navigation.navigate('Profile' as any);
+    }
   };
 
   const addXp = async (amount: number) => {
@@ -169,10 +384,76 @@ export default function MainScreen() {
   };
 
   const handlePlay = () => {
+    // local animations/UX
     increaseFriendship();
     startFunAnimation();
-    // 놀아주기: +1 XP
-    addXp(1);
+    // call backend event for PLAY
+    (async () => {
+      try {
+        const res = await sendEvent('PLAY');
+        // Server may return only level/state/was_hungry (no experience).
+        // If experience is present, use it. Otherwise try to fetch full Como via GET /como.
+        let newXp: number;
+        let newLevel: number;
+        if (typeof res?.experience === 'number') {
+          newXp = res.experience;
+          newLevel = typeof res?.level === 'number' ? res.level : getLevelFromXp(newXp);
+        } else {
+          try {
+            const c = await getComo();
+            if (c && typeof c.experience === 'number') {
+              newXp = c.experience;
+              newLevel = typeof c.level === 'number' ? c.level : getLevelFromXp(newXp);
+            } else {
+              // fallback: if server gave level, use start XP for that level
+              newLevel = typeof res?.level === 'number' ? res.level : level;
+              newXp = totalRequiredForLevel(newLevel);
+            }
+              // sync hunger state from GET /como when available
+              try {
+                if (c && typeof c.state === 'string') {
+                  const s = c.state.toUpperCase();
+                  if (s === 'HUNGRY') {
+                    await AsyncStorage.removeItem(LAST_FED_KEY);
+                    setIsHungry(true);
+                  } else {
+                    // persist fed marker for today
+                    const today = (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })();
+                    await AsyncStorage.setItem(LAST_FED_KEY, today);
+                    setIsHungry(false);
+                  }
+                }
+              } catch (ee) {
+                // ignore storage sync errors
+              }
+          } catch (e) {
+            newLevel = typeof res?.level === 'number' ? res.level : level;
+            newXp = totalRequiredForLevel(newLevel);
+          }
+        }
+
+        setXp(newXp);
+        setLevel(newLevel);
+        await persistXpLevel(newXp, newLevel);
+        if (res.was_hungry) setIsHungry(true); else setIsHungry(false);
+      } catch (e) {
+        // fallback: local increment
+        // addXp(1);
+      }
+    })();
+  };
+
+  const handleToggleTalking = async () => {
+    // toggle local state and notify hardware
+    const next = !isTalking;
+    setIsTalking(next);
+    try {
+      const deviceId = await getDeviceId();
+      await sendHardwareEvent(deviceId, next ? 'TALK' : 'TALK_STOP');
+    } catch (e) {
+      // ignore hardware send errors, but keep UI state
+      console.warn('sendHardwareEvent (talk) failed', e);
+    }
   };
 
   const handleGoWalk = () => {
@@ -180,13 +461,25 @@ export default function MainScreen() {
     setFriendship((prev) => Math.min(1, prev + 0.05));
     // 산책은 하루 1회 +5XP
     (async () => {
-      const today = getTodayString();
+      try {
+        await AsyncStorage.setItem(WALK_ACTIVE_KEY, '1');
+        setIsWalkingActive(true);
+      } catch (e) {
+        // ignore
+      }
+      const today = (() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      })();
       const key = WALK_KEY_PREFIX + today;
       try {
         const v = await AsyncStorage.getItem(key);
         if (!v) {
           await AsyncStorage.setItem(key, '1');
-          addXp(5);
+          // addXp(5);
         }
       } catch (e) {
         // ignore
@@ -327,22 +620,72 @@ export default function MainScreen() {
   const handleFeed = () => {
     increaseFriendship();
     startHappyAnimation();
-    // persist today's date as last fed
+    // call backend event for FEED and update state from server
     (async () => {
       try {
-        await AsyncStorage.setItem(LAST_FED_KEY, getTodayString());
-        setIsHungry(false);
-        // feed count limit 3/day: key per date
-        const today = getTodayString();
-        const feedKey = FEED_COUNT_PREFIX + today;
-        const raw = await AsyncStorage.getItem(feedKey);
-        const count = raw ? parseInt(raw, 10) : 0;
-        if (count < 3) {
-          await AsyncStorage.setItem(feedKey, String(count + 1));
-          addXp(5);
+        const res = await sendEvent('FEED');
+        // Server may return only level/state/was_hungry. If experience missing, fetch Como.
+        let newXp: number;
+        let newLevel: number;
+        if (typeof res?.experience === 'number') {
+          newXp = res.experience;
+          newLevel = typeof res?.level === 'number' ? res.level : getLevelFromXp(newXp);
+        } else {
+          try {
+            const c = await getComo();
+            if (c && typeof c.experience === 'number') {
+              newXp = c.experience;
+              newLevel = typeof c.level === 'number' ? c.level : getLevelFromXp(newXp);
+            } else {
+              newLevel = typeof res?.level === 'number' ? res.level : level;
+              newXp = totalRequiredForLevel(newLevel);
+            }
+              // sync hunger state from GET /como when available
+              try {
+                if (c && typeof c.state === 'string') {
+                  const s = c.state.toUpperCase();
+                  if (s === 'HUNGRY') {
+                    await AsyncStorage.removeItem(LAST_FED_KEY);
+                    setIsHungry(true);
+                  } else {
+                    await AsyncStorage.setItem(LAST_FED_KEY, (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })());
+                    setIsHungry(false);
+                  }
+                }
+              } catch (ee) {
+                // ignore storage sync errors
+              }
+          } catch (e) {
+            newLevel = typeof res?.level === 'number' ? res.level : level;
+            newXp = totalRequiredForLevel(newLevel);
+          }
         }
+
+        setXp(newXp);
+        setLevel(newLevel);
+        await persistXpLevel(newXp, newLevel);
+        // update hungry state
+        if (res.was_hungry) setIsHungry(true); else setIsHungry(false);
+  // also persist last fed date when server acknowledges feed
+  await AsyncStorage.setItem(LAST_FED_KEY, (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })());
       } catch (e) {
-        // ignore write errors
+        // fallback: local behavior
+        (async () => {
+            try {
+              await AsyncStorage.setItem(LAST_FED_KEY, (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })());
+              setIsHungry(false);
+              const today = (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })();
+            const feedKey = FEED_COUNT_PREFIX + today;
+            const raw = await AsyncStorage.getItem(feedKey);
+            const count = raw ? parseInt(raw, 10) : 0;
+            if (count < 3) {
+              await AsyncStorage.setItem(feedKey, String(count + 1));
+              // addXp(5);
+            }
+          } catch (ee) {
+            // ignore
+          }
+        })();
       }
     })();
   };
@@ -351,7 +694,39 @@ export default function MainScreen() {
     // 움직이기 동작 (임시: 친밀도 증가)
     increaseFriendship();
     // 움직이기: 소폭 XP
-    addXp(1);
+    // addXp(1);
+  };
+
+  const [isMoving, setIsMoving] = useState(false);
+
+  const handleStop = () => {
+    // 멈춤 동작: 현재는 상태 토글만 처리
+    setIsMoving(false);
+    // 필요시 추가 행동을 여기에 구현
+  };
+
+  const handleToggleMove = async () => {
+    if (!isMoving) {
+      // start moving: send START to hardware
+      setIsMoving(true);
+      handleMove();
+      try {
+        const deviceId = await getDeviceId();
+        await sendHardwareEvent(deviceId, 'START');
+      } catch (e) {
+        console.warn('sendHardwareEvent (START) failed', e);
+      }
+    } else {
+      // stop moving: send STOP
+      handleStop();
+      try {
+        const deviceId = await getDeviceId();
+        await sendHardwareEvent(deviceId, 'STOP');
+      } catch (e) {
+        console.warn('sendHardwareEvent (STOP) failed', e);
+      }
+      setIsMoving(false);
+    }
   };
 
   const handleSave = () => {
@@ -359,7 +734,16 @@ export default function MainScreen() {
     increaseFriendship();
     startHappyAnimation();
     // 구해주기: +2XP
-    addXp(2);
+    // addXp(2);
+    // send BACK to hardware
+    (async () => {
+      try {
+        const deviceId = await getDeviceId();
+        await sendHardwareEvent(deviceId, 'BACK');
+      } catch (e) {
+        console.warn('sendHardwareEvent (BACK) failed', e);
+      }
+    })();
   };
 
   return (
@@ -403,8 +787,8 @@ export default function MainScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={toggleDrawer} style={{ padding: 6 }}>
-          <Text style={[styles.menuIcon, { fontSize: 30, transform: [{ translateX: -4 }, { scaleX: 1.9 }, { scaleY: 1.9 }] }]}>≡</Text>
+        <TouchableOpacity onPress={toggleDrawer} style={{ padding: 4, alignSelf: 'center' }}>
+          <Text style={[styles.menuIcon, { fontSize: 20, transform: [{ translateX: -2 }, { translateY: 7 }, { scaleX: 1.5 }, { scaleY: 1.5 }] }]}>≡</Text>
         </TouchableOpacity>
       </View>
 
@@ -415,24 +799,31 @@ export default function MainScreen() {
               source={isHungry ? require("../assets/state_hungry.png") : require("../assets/dog.png")}
               style={styles.dogImageBackground}
             />
+            {isHungry && (
+              <View style={{ position: 'absolute', top: 220, right: 70, zIndex: 50 }} pointerEvents="none">
+                <Text style={styles.hungryLabelOverlay}>배고파..</Text>
+              </View>
+            )}
             
             <View style={styles.cardContent}>
               <View style={styles.progressContainer}>
                 <View style={styles.progressTitleRow}>
                   <Text style={styles.progressTitle}>
-                    <Text style={styles.bold}>코모</Text> 와의 친밀도
+                    <Text style={styles.bold}>{petName}</Text> 와의 친밀도
                   </Text>
                   <Text style={styles.levelText}>Lv.{level}</Text>
                 </View>
 
-                <View style={styles.progressBarWrapper}>
-                  <Image
-                    source={require("../assets/minidog.png")}
-                    style={styles.miniDogOnBar}
-                  />
+                <View style={styles.progressBarWrapper} onLayout={(e) => setBarWidth(e.nativeEvent.layout.width)}>
+                  <Animated.View style={[styles.miniDogWrapper, { top: (48 - DOG_SIZE) / 2, width: DOG_SIZE, height: DOG_SIZE, transform: [{ translateX: dogPosAnim }] }]}> 
+                    <Image
+                      source={require("../assets/minidog.png")}
+                      style={styles.miniDogOnBarImage}
+                    />
+                  </Animated.View>
                   <Progress.Bar
                     progress={getProgressForLevel(xp, level)}
-                    width={screenWidth * 0.8}
+                    width={barWidth > 0 ? barWidth : screenWidth * 0.8}
                     height={14}
                     borderRadius={10}
                     color="#3f3023"
@@ -440,11 +831,13 @@ export default function MainScreen() {
                     borderWidth={0}
                   />
 
+                  {/* XP numeric labels removed per design request */}
+
                 </View>
               </View>
 
               <Text style={styles.motivationText}>
-                자신의 가능성을 믿어보세요!
+                {quote || '자신의 가능성을 믿어보세요!'}
               </Text>
 
               {levelUpVisible && recentLevelUp !== null && (
@@ -486,9 +879,7 @@ export default function MainScreen() {
                   <Switch
                     trackColor={{ false: "#767577", true: "#715C46" }}
                     thumbColor={isTalking ? "#443627" : "#443627"}
-                    onValueChange={() =>
-                      setIsTalking((previousState) => !previousState)
-                    }
+                    onValueChange={handleToggleTalking}
                     value={isTalking}
                   />
                 </View>
@@ -508,22 +899,30 @@ export default function MainScreen() {
                   <Text style={styles.buttonText}>놀아주기</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.button} onPress={handleGoWalk}>
+                <TouchableOpacity style={styles.button} onPress={isWalkingActive ? () => navigation.navigate('Walk') : handleGoWalk}>
                   <Image
                     source={require("../assets/gowalk.png")}
                     style={{ width: 48, height: 48 }}
                     accessibilityLabel="Go Walk"
                   />
-                  <Text style={styles.buttonText}>산책가기</Text>
+                  <Text style={styles.buttonText}>{isWalkingActive ? '산책종료' : '산책가기'}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.button} onPress={handleMove}>
-                  <Image
-                    source={require("../assets/start.png")}
-                    style={{ width: 48, height: 48 }}
-                    accessibilityLabel="Start"
-                  />
-                  <Text style={styles.buttonText}>움직이기</Text>
+                <TouchableOpacity style={styles.button} onPress={handleToggleMove}>
+                  {isMoving ? (
+                    <Image
+                      source={require("../assets/stop.png")}
+                      style={{ width: 48, height: 48 }}
+                      accessibilityLabel="Stop"
+                    />
+                  ) : (
+                    <Image
+                      source={require("../assets/start.png")}
+                      style={{ width: 48, height: 48 }}
+                      accessibilityLabel="Start"
+                    />
+                  )}
+                  <Text style={styles.buttonText}>{isMoving ? '멈춤' : '움직이기'}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.button} onPress={handleSave}>
@@ -556,6 +955,29 @@ export default function MainScreen() {
         {currentPage === "diary" && <DiaryScreen />}
       </View>
       {/* Right drawer: animated slide from right */}
+      {/* overlay behind drawer: only visible when drawer opens (animated opacity) */}
+      <Animated.View
+        pointerEvents={isDrawerOpen ? 'auto' : 'none'}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 48,
+          backgroundColor: 'rgba(0,0,0,0.4)',
+          opacity: drawerAnim, // animate opacity with drawerAnim (0 closed -> 1 open)
+        }}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => {
+            if (isDrawerOpen) toggleDrawer();
+          }}
+          style={{ flex: 1 }}
+        />
+      </Animated.View>
+
       <Animated.View
         pointerEvents={isDrawerOpen ? 'auto' : 'none'}
         style={[
@@ -576,10 +998,26 @@ export default function MainScreen() {
           </TouchableOpacity>
         </View>
         <View style={{ padding: 16 }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 6 }}>{petName}</Text>
           <Text style={{ fontWeight: '700', marginBottom: 8 }}>레벨: Lv.{level}</Text>
           <Text>XP: {xp}</Text>
-          <TouchableOpacity onPress={resetLevel} style={{ marginTop: 12, backgroundColor: '#3f3023', padding: 10, borderRadius: 8 }}>
-            <Text style={{ color: '#fff', fontWeight: '700' }}>레벨 리셋 (Lv.1)</Text>
+          <TouchableOpacity onPress={resetLevel} style={styles.drawerButton}>
+            <Text style={styles.drawerButtonText}>레벨 리셋 (Lv.1)</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleEditProfile} style={[styles.drawerButton, { marginTop: 10, backgroundColor: '#eee' }]}>
+            <Text style={[styles.drawerButtonText, { color: '#333' }]}>이름 편집</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleReplayTutorial} style={[styles.drawerButton, { marginTop: 10, backgroundColor: '#eee' }]}>
+            <Text style={[styles.drawerButtonText, { color: '#333' }]}>튜토리얼 다시보기</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={handleLogout} style={[styles.drawerButton, { marginTop: 10, backgroundColor: '#b93b3b' }]}>
+            <Text style={styles.drawerButtonText}>로그아웃</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={setHungryNow} style={[styles.drawerButton, { marginTop: 10, backgroundColor: '#ff8c00' }]}>
+            <Text style={styles.drawerButtonText}>바로 굶주리게 만들기</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
@@ -594,21 +1032,36 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#3f3023",
   },
+  miniDogWrapper: {
+    position: 'absolute',
+    left: 0,
+    zIndex: 3,
+    pointerEvents: 'none',
+  },
+  miniDogOnBarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 3,
+    borderColor: '#3f3023',
+    backgroundColor: '#fff',
+    resizeMode: 'cover',
+  },
   header: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 24,
     paddingVertical: 15,
   },
   headerButtons: {
     flexDirection: "row",
-    gap: 20,
+    gap: 16,
   },
   headerButton: {
     alignItems: "center",
     justifyContent: "flex-end",
-    height: 42,
+    height: 40,
   },
   dot: {
     width: 6,
@@ -634,6 +1087,7 @@ const styles = StyleSheet.create({
   menuIcon: {
     transform: [{ translateX: -8 }, { scaleX: 1.7 }, { scaleY: 1.7 }],
     color: "white",
+    lineHeight: 20,
   },
   card: {
     backgroundColor: "white",
@@ -809,5 +1263,55 @@ const styles = StyleSheet.create({
   closeText: {
     fontSize: 20,
     color: '#333',
+  },
+  drawerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)'
+  },
+  drawerButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#3f3023',
+    alignItems: 'center',
+  },
+  drawerButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  pauseIcon: {
+    fontSize: 34,
+    lineHeight: 40,
+  },
+  hungryLabel: {
+    fontSize: 14,
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    overflow: 'hidden',
+    fontWeight: '900',
+  },
+  hungryLabelSmall: {
+    fontSize: 12,
+    color: '#6b4f3f',
+    backgroundColor: 'transparent',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    borderRadius: 0,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  hungryLabelOverlay: {
+    fontSize: 14,
+    color: '#fff',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    overflow: 'hidden',
+    fontWeight: '800',
   },
 });

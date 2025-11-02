@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { createComo, markCreatedFlag } from '../services/como';
 
 export default function TutorialScreen6({ navigation }: any) {
   const [name, setName] = useState("");
@@ -10,6 +11,17 @@ export default function TutorialScreen6({ navigation }: any) {
       const AsyncStorage = await import("@react-native-async-storage/async-storage");
       await AsyncStorage.default.setItem("hasSeenTutorial", "true");
       await AsyncStorage.default.setItem("petName", name);
+
+      // create a Como on the backend using a temporary random device_id.
+      // For now we generate a non-persistent random string as requested.
+      try {
+        const randomId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-6);
+        await createComo({ device_id: randomId, name: name || 'como' });
+        // mark locally so other flows don't try to recreate it
+        await markCreatedFlag();
+      } catch (createErr) {
+        console.warn('createComo failed in tutorial finish', createErr);
+      }
     } catch (err) {
       console.warn("AsyncStorage not available — tutorial flag won't be persisted.", err);
     }

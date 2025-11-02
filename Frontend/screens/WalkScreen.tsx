@@ -6,11 +6,16 @@ import {
   Image,
   SafeAreaView,
   TouchableOpacity,
+  ActivityIndicator,
   Animated,
   Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { endWalk } from '../services/walk';
+import { sendEvent } from '../services/event';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+const WALK_ACTIVE_KEY = 'comox_walk_active';
 
 export default function WalkScreen() {
   const insets = useSafeAreaInsets();
@@ -23,9 +28,13 @@ export default function WalkScreen() {
   const [weather, setWeather] = React.useState<any | null>(null);
   const [locName, setLocName] = React.useState<string | null>(null);
   const [loadingWeather, setLoadingWeather] = React.useState(false);
+  const [bgColor, setBgColor] = React.useState<string>('#9AD0FF');
 
-  // Replace with your OpenWeatherMap API key
-  const OPENWEATHER_API_KEY = 'YOUR_OPENWEATHERMAP_API_KEY';
+  // Read API key from environment if available, otherwise fall back to .env literal
+  // When running locally you can set OPENWEATHER_API_KEY in the environment or in the project's .env
+  const OPENWEATHER_API_KEY = (process.env.OPENWEATHER_API_KEY as string) || '86575c333aa45bc14d1d43f91c5f69d0';
+
+  const [ending, setEnding] = React.useState(false);
 
   useEffect(() => {
     // continuous one-direction rotation: 0 -> 1 maps to 0deg -> -360deg
@@ -41,12 +50,42 @@ export default function WalkScreen() {
     return () => loop.stop();
   }, [tiltAnim]);
 
+  // helper: determine background color from weather
+  function colorForWeather(main: string, wJson: any | null) {
+    const m = (main || '').toLowerCase();
+    switch (m) {
+      case 'clear':
+        return '#9AD0FF'; // bright sky
+      case 'clouds':
+        return '#BFC9D6'; // light gray-blue
+      case 'rain':
+      case 'drizzle':
+        return '#6EA8C7'; // muted blue
+      case 'thunderstorm':
+        return '#7A6B9F'; // purple-gray
+      case 'snow':
+        return '#EAF6FF'; // very pale blue
+      case 'mist':
+      case 'smoke':
+      case 'haze':
+      case 'fog':
+        return '#C9D6D5'; // foggy gray
+      default:
+        if (wJson && typeof wJson.main?.temp === 'number') {
+          const t = wJson.main.temp;
+          if (t >= 25) return '#FFD59E'; // warm
+          if (t >= 15) return '#C6E7FF'; // mild
+          return '#DDEBF7'; // cool
+        }
+        return '#9AD0FF';
+    }
+  }
+
   // Fetch approximate location via IP as a no-permission fallback, then fetch weather
   useEffect(() => {
     let mounted = true;
     const fetchWeatherData = async () => {
       try {
-        setLoadingWeather(true);
         // 1) get approximate location from IP (no native permission required)
         const locRes = await fetch('https://ipapi.co/json/');
         const locJson = await locRes.json();
@@ -61,10 +100,15 @@ export default function WalkScreen() {
           if (mounted) {
             setWeather(wJson);
             setLocName(wJson.name || locJson.city || null);
+            // pick background color based on weather condition
+            const main = (wJson.weather && wJson.weather[0] && wJson.weather[0].main) || '';
+            setBgColor(colorForWeather(main, wJson));
           }
         } else if (mounted) {
-          // no API key provided — fall back to IP city only
+          // no API key provided — fall back to IP city only and set color by probable local cloudiness
           setLocName(locJson.city || null);
+          const probable = (locJson && locJson.region) ? 'Clouds' : 'Clear';
+          setBgColor(colorForWeather(probable, null));
         }
       } catch (e) {
         // ignore errors, keep defaults
@@ -78,10 +122,12 @@ export default function WalkScreen() {
     };
   }, []);
 
+  
+
   const gradientStops = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9];
 
   return (
-    <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}> 
+    <SafeAreaView style={[styles.container, { backgroundColor: bgColor, paddingTop: insets.top }]}> 
       {/* faux gradient: stack translucent white strips from center-bottom to bottom */}
       <View style={styles.gradientOverlay} pointerEvents="none">
         {gradientStops.map((t, i) => (
@@ -95,7 +141,7 @@ export default function WalkScreen() {
         ))}
       </View>
 
-      <View style={styles.headerRow}>
+  <View style={[styles.headerRow, { top: 12 + insets.top }]}>
         <TouchableOpacity
           onPress={() => navigation.navigate('MainApp')}
           style={styles.homeButton}
@@ -119,11 +165,11 @@ export default function WalkScreen() {
       <View style={[styles.bottomContainer, { bottom: 160 + insets.bottom }]} pointerEvents="box-none">
         <Animated.Image
           source={require('../assets/walkGround.png')}
-          style={[
+            style={[
             styles.groundImage,
             {
-              transform: [
-                  { translateY: 90 },
+                transform: [
+                    { translateY: 200 },
                 {
                   rotate: tiltAnim.interpolate({
                     inputRange: [0, 1],
@@ -140,10 +186,10 @@ export default function WalkScreen() {
         <Animated.Image
           source={require('../assets/walkingdog.png')}
           style={{
-            width: 200,
-            height: 160,
+            width: 220,
+            height: 180,
             position: 'absolute',
-            bottom: 140 + insets.bottom,
+            bottom: 100 + insets.bottom,
             alignSelf: 'center',
             zIndex: 50,
             transform: [
@@ -163,6 +209,54 @@ export default function WalkScreen() {
           <Text style={styles.weatherBody}>코모와 함께 산책하는 기분을 즐겨보세요.</Text>
         </View>
       </View>
+      {/* End walk button - centered white text */}
+      <TouchableOpacity
+        onPress={async () => {
+          if (ending) return;
+          try {
+            setEnding(true);
+            // call backend to end the walk; payload optional
+            await endWalk({});
+            // also notify app event endpoint that walk stopped so server can award xp/level
+            try {
+              const ev = await sendEvent('WALK_STOP');
+              // persist xp/level/last-fed if present
+              try {
+                if (typeof ev.experience === 'number') await AsyncStorage.setItem('comox_xp', String(ev.experience));
+                if (typeof ev.level === 'number') await AsyncStorage.setItem('comox_level', String(ev.level));
+                if (typeof ev.was_hungry !== 'undefined') {
+                  // when was_hungry true, keep last fed as not today (so hungry state displays)
+                  if (!ev.was_hungry) {
+                    // server indicates not hungry -> mark as fed today
+                    await AsyncStorage.setItem('lastFedDate', new Date().toISOString().slice(0, 10));
+                  }
+                }
+              } catch (e) {
+                // ignore persistence errors
+              }
+            } catch (e) {
+              // ignore event send errors
+            }
+          } catch (e) {
+            console.warn('endWalk failed', e);
+          } finally {
+              setEnding(false);
+              try {
+                await AsyncStorage.removeItem(WALK_ACTIVE_KEY);
+              } catch (e) {
+                // ignore
+              }
+              navigation.goBack();
+          }
+        }}
+        style={[styles.endButton, { top: 19 + insets.top, right: 16 }]}
+      >
+        {ending ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.endButtonText}>끝내기</Text>
+        )}
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -185,7 +279,6 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     position: 'absolute',
-    top: 52, // moved down to match tutorial back button y
     left: 16,
     zIndex: 10,
     flexDirection: 'row',
@@ -250,8 +343,8 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
   groundImage: {
-    width: 520,
-    height: 300,
+    width: 620,
+    height: 370,
     marginBottom: 0,
   },
   weatherCard: {
@@ -275,5 +368,18 @@ const styles = StyleSheet.create({
   weatherBody: {
     fontSize: 14,
     color: '#666',
+  },
+  endButton: {
+    position: 'absolute',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
+    zIndex: 20,
+  },
+  endButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
