@@ -27,7 +27,10 @@ def create_middlewares(app: FastAPI):
                 )
                 user_context.set(current)
             except Exception:
-                user_context.set("Anonymous")
+                # Firebase 토큰이 아니면 → userId로 간주
+                current = CurrentUser(uid=token)
+                user_context.set(current)
+
         else:
             user_context.set("Anonymous")
 
