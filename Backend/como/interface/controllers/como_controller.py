@@ -155,9 +155,10 @@ def handle_app_event(
         "owner_id": como.owner_id,
         "experience": como.experience,
         "level": como.level,
-        "state": como.state.value,
+        "state": como.state,
         "was_hungry": getattr(como, "was_hungry", False),
     }
+
 
 @router.post("/dialog")
 @inject
@@ -168,7 +169,6 @@ def save_dialog(
     current = user_context.get()
     if current == "Anonymous":
         raise HTTPException(status_code=401, detail="Unauthorized")
-
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     lines = [
