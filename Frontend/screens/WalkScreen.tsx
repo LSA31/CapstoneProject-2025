@@ -29,12 +29,55 @@ export default function WalkScreen() {
   const [locName, setLocName] = React.useState<string | null>(null);
   const [loadingWeather, setLoadingWeather] = React.useState(false);
   const [bgColor, setBgColor] = React.useState<string>('#9AD0FF');
+  const [weatherMessage, setWeatherMessage] = React.useState<string>('날씨 정보를 불러오는 중이에요...');
 
   // Read API key from environment if available, otherwise fall back to .env literal
   // When running locally you can set OPENWEATHER_API_KEY in the environment or in the project's .env
   const OPENWEATHER_API_KEY = (process.env.OPENWEATHER_API_KEY as string) || '86575c333aa45bc14d1d43f91c5f69d0';
 
   const [ending, setEnding] = React.useState(false);
+
+  const messageForWeather = React.useCallback((main: string, temp: number | null) => {
+    const normalized = (main || '').toLowerCase();
+    const tempValue = typeof temp === 'number' ? temp : null;
+
+    if (normalized === 'thunderstorm') {
+      return '천둥 번개가 치고 있어요. 오늘은 실내에서 쉬는 게 좋겠어요.';
+    }
+    if (normalized === 'rain' || normalized === 'drizzle') {
+      return '비가 오니 우산을 챙겨 짧게 산책해보세요.';
+    }
+    if (normalized === 'snow') {
+      return '눈이 오네요. 길이 미끄러울 수 있으니 조심해서 걸어요.';
+    }
+    if (['mist', 'smoke', 'haze', 'fog', 'dust', 'sand'].includes(normalized)) {
+      return '안개로 뿌옇습니다. 천천히 주변을 살피며 산책하세요.';
+    }
+
+    if (tempValue !== null) {
+      if (tempValue >= 32) {
+        return '무척 더운 날씨예요. 짧게 걷고 수분을 충분히 챙기세요.';
+      }
+      if (tempValue >= 27) {
+        return '더운 편이니 시원한 시간대를 골라 산책하면 좋아요.';
+      }
+      if (tempValue <= -5) {
+        return '매우 추워요. 실내에서 쉬거나 따뜻하게 입고 나가세요.';
+      }
+      if (tempValue <= 3) {
+        return '쌀쌀하니 따뜻한 옷을 챙겨 입고 산책해요.';
+      }
+    }
+
+    if (normalized === 'clouds') {
+      return '구름이 끼었지만 걷기에는 무리 없는 날씨예요.';
+    }
+    if (normalized === 'clear') {
+      return '맑은 하늘! 산책하기 딱 좋은 날이에요!';
+    }
+
+    return '산책하기 좋은 날이에요!';
+  }, []);
 
   useEffect(() => {
     // continuous one-direction rotation: 0 -> 1 maps to 0deg -> -360deg
@@ -85,6 +128,10 @@ export default function WalkScreen() {
   useEffect(() => {
     let mounted = true;
     const fetchWeatherData = async () => {
+      if (mounted) {
+        setLoadingWeather(true);
+        setWeatherMessage('날씨 정보를 불러오는 중이에요...');
+      }
       try {
         // 1) get approximate location from IP (no native permission required)
         const locRes = await fetch('https://ipapi.co/json/');
@@ -103,15 +150,21 @@ export default function WalkScreen() {
             // pick background color based on weather condition
             const main = (wJson.weather && wJson.weather[0] && wJson.weather[0].main) || '';
             setBgColor(colorForWeather(main, wJson));
+            const tempValue = typeof wJson.main?.temp === 'number' ? wJson.main.temp : null;
+            setWeatherMessage(messageForWeather(main, tempValue));
           }
         } else if (mounted) {
           // no API key provided — fall back to IP city only and set color by probable local cloudiness
           setLocName(locJson.city || null);
           const probable = (locJson && locJson.region) ? 'Clouds' : 'Clear';
           setBgColor(colorForWeather(probable, null));
+          setWeatherMessage(messageForWeather(probable, null));
         }
       } catch (e) {
         // ignore errors, keep defaults
+        if (mounted) {
+          setWeatherMessage('날씨 정보를 불러오지 못했어요. 코모와 실내 놀이를 즐겨볼까요?');
+        }
       } finally {
         if (mounted) setLoadingWeather(false);
       }
@@ -120,11 +173,19 @@ export default function WalkScreen() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [OPENWEATHER_API_KEY, messageForWeather]);
 
   
 
   const gradientStops = [0.0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9];
+  const tempC = weather && typeof weather.main?.temp === 'number' ? weather.main.temp : null;
+  const temperatureText = tempC !== null ? `${Math.round(tempC)}°` : '--°';
+  const locationLabel = locName || '위치를 확인하는 중이에요';
+  const weatherDetail = loadingWeather
+    ? '날씨 정보를 불러오는 중이에요...'
+    : tempC !== null
+      ? `현재 기온은 ${Math.round(tempC)}°C예요.`
+      : '코모와 함께 산책하는 기분을 즐겨보세요.';
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bgColor, paddingTop: insets.top }]}> 
@@ -152,8 +213,8 @@ export default function WalkScreen() {
 
       <View style={styles.topCenter}>
         <Text style={styles.locationTitle}>나의 위치</Text>
-        <Text style={styles.locationSub}>서원구</Text>
-        <Text style={styles.temperature}>24°</Text>
+        <Text style={styles.locationSub}>{locationLabel}</Text>
+        <Text style={styles.temperature}>{temperatureText}</Text>
       </View>
 
       {/* place a walking dog image between the top center and the bottom card */}
@@ -205,8 +266,8 @@ export default function WalkScreen() {
         />
 
         <View style={styles.weatherCard}>
-          <Text style={styles.weatherTitle}>산책하기 좋은 날이에요!</Text>
-          <Text style={styles.weatherBody}>코모와 함께 산책하는 기분을 즐겨보세요.</Text>
+          <Text style={styles.weatherTitle}>{weatherMessage}</Text>
+          <Text style={styles.weatherBody}>{weatherDetail}</Text>
         </View>
       </View>
       {/* End walk button - centered white text */}
