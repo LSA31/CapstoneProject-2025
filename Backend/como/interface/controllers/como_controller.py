@@ -128,6 +128,7 @@ async def upload_como_audio(
         {
             "diaryId": diary.diary_id,
             "audioUrl": signed_url,
+            "userId": owner_id,
         }
     )
 
