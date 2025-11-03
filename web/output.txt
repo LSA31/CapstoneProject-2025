@@ -1,0 +1,1 @@
+sudo: /home/pi/sherpa-ncnn/build/bin/sherpa-ncnn-alsa: command not found

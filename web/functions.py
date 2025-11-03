@@ -16,7 +16,10 @@ import ultra
 import Kalman_filter
 import move
 import RPIservo
+import random
 from gpiozero import InputDevice
+
+import asyncio
 
 scGear = RPIservo.ServoCtrl()
 scGear.start()
@@ -28,6 +31,12 @@ kalman_filter_X =  Kalman_filter.Kalman_filter(0.01,0.1)
 
 curpath = os.path.realpath(__file__)
 thisPath = "/" + os.path.dirname(curpath)
+
+# === 외부에서 websocket_client의 event_queue 주입용 함수 ===
+def set_event_queue(queue, loop=None):
+    global event_queue, event_loop
+    event_queue = queue
+    event_loop = loop
 
 def num_import_int(initial):        #Call this function to import data from '.txt' file
 	global r
@@ -144,39 +153,65 @@ class Functions(threading.Thread):
 
 
 	def trackLineProcessing(self):
-		status_right = track_line_right.value
-		status_middle = track_line_middle.value
-		status_left = track_line_left.value
-		if status_middle == 0:
-			if status_left == 0 and status_right == 1:
-				scGear.moveAngle(0, 25)
-				scGear.moveAngle(2, 0)
-				time.sleep(0.1)
-				move.move(30,1,"mid")
-			elif status_left == 1 and status_right == 0:
-				scGear.moveAngle(0,-25)
-				scGear.moveAngle(2, 0)
-				time.sleep(0.1)
-				move.move(30,1,"mid")
-			else:
-				scGear.moveAngle(0, 0)
-				scGear.moveAngle(2, 0)
-				move.move(30,1,"mid")
-		elif status_left == 0:
-			scGear.moveAngle(0,25)
-			scGear.moveAngle(2,0)
-			time.sleep(0.1)
-			move.move(30,1,"mid")
-		elif status_right == 0:
-			scGear.moveAngle(0,-25)
-			scGear.moveAngle(2,0)
-			time.sleep(0.1)
-			move.move(30,1,"mid")
-		else:
-			move.move(30,1,"no")
-		print(status_left,status_middle,status_right)
-		time.sleep(0.1)
+		"""
+		손 감지(터치형 반응 랜덤 모드)
+		손이 가까이 오면 무작위로 두 가지 반응 중 하나 수행:
+		앞바퀴 좌우 흔들기
+		앞으로/뒤로 살짝 움직이기
+		"""
+		print("=== Touch Reaction Mode (trackLine 버튼) 활성화 ===")
 
+		#  from websocket_client import event_queue
+
+		while True:
+			if self.functionMode != 'trackLine':
+				break
+
+			dist = self.distRedress()
+			print(f"거리 감지: {dist:.1f}cm")
+
+			# 손이 가까이 왔을 때만 반응
+			if dist < 15:
+				print("손 감지됨! 랜덤 반응 수행 중...")
+
+				# 서버로 TOUCH 이벤트 전송 요청
+				try:
+					if 'event_queue' in globals() and event_queue:
+						asyncio.run_coroutine_threadsafe(event_queue.put("TOUCH"), event_loop)
+						print("[TOUCH] 이벤트 서버 전송 요청 완료")
+				except Exception as e:
+					print(f"[ERROR] TOUCH 이벤트 전송 실패: {e}")
+
+				action = random.choice(["wiggle", "move"])
+
+				if action == "wiggle":
+					print("→ 앞바퀴 좌우 흔들기")
+					for _ in range(2):
+						scGear.moveAngle(0, 40)
+						time.sleep(0.25)
+						scGear.moveAngle(0, -40)
+						time.sleep(0.25)
+					scGear.moveAngle(0, 0)
+					time.sleep(0.5)
+
+				elif action == "move":
+					print("→ 앞뒤로 살짝 이동")
+					for _ in range(2):
+						move.move(70, -1, "mid")   # 앞으로 살짝
+						time.sleep(0.3)
+						move.move(70, 1, "mid")  # 뒤로 살짝
+						time.sleep(0.3)
+						move.motorStop()
+						time.sleep(0.1)
+					move.motorStop()
+					time.sleep(0.5)
+
+			else:
+				# 대기 상태 (센서만 감시)
+				move.motorStop()
+				scGear.moveAngle(0, 0)
+
+			time.sleep(0.2)
 
 	
 # Filter out occasional incorrect distance data.
@@ -194,45 +229,113 @@ class Functions(threading.Thread):
 
 	def automaticProcessing(self):
 		print('automaticProcessing')
-		dist = self.distRedress()
-		print(dist, "cm")
-		if dist >= 50:			# More than 50CM, go straight.
-			scGear.moveAngle(0, 0)
-			time.sleep(0.3)
-			move.move(40, 1, "mid")
-			print("Forward")
-		# More than 30cm and less than 50cm, detect the distance between the left and right sides.
-		elif dist > 30 and dist < 50:	
-			move.move(0, 1, "mid")
-			scGear.moveAngle(1, -40)
-			time.sleep(0.4)
-			distLeft = self.distRedress()
-			self.scanList[0] = distLeft
 
-			# Go in the direction where the detection distance is greater.
-			scGear.moveAngle(1, 40)
-			time.sleep(0.4)
-			distRight = self.distRedress()
-			self.scanList[1] = distRight
-			print(self.scanList)
-			scGear.moveAngle(1, 0)
-			if self.scanList[0] >= self.scanList[1]:
-				scGear.moveAngle(0, -30)
-				time.sleep(0.3)
-				move.move(40, 1, "left")
-				print("Left")
-			else:
-				scGear.moveAngle(0, 30)
-				time.sleep(0.3)
-				move.move(40, 1, "right")
-				print("Right")
-		else:		# The distance is less than 30cm, back.
+		# 거리값을 3번 읽어서 평균내기
+		dist = sum(self.distRedress() for _ in range(3)) / 3
+		dist = min(round(dist, 1), 150)  # 150cm 이상 튀는 값 보정
+		print("평균 거리:", dist, "cm")
+
+		if dist >= 60:			# More than 50CM, go straight.
 			scGear.moveAngle(0, 0)
 			time.sleep(0.3)
-			move.move(40, -1, "mid")
-			print("Back")
-		time.sleep(0.4)	
-		
+			move.move(50, 1, "mid")
+			print("Forward")
+
+		elif 30 < dist < 60:
+			print("장애물 감지 → 방향 탐색")
+			# === 2. 좌/우 거리 측정 ===
+			scGear.moveAngle(1, -45)  # 왼쪽
+			time.sleep(0.2)
+			distLeft = sum(self.distRedress() for _ in range(3)) / 3
+			distLeft = min(round(distLeft, 1), 150)
+
+			scGear.moveAngle(1, 45)   # 오른쪽
+			time.sleep(0.2)
+			distRight = sum(self.distRedress() for _ in range(3)) / 3
+			distRight = min(round(distRight, 1), 150)
+
+			scGear.moveAngle(1, 0)    # 시야 복원
+			print(f"왼쪽: {distLeft:.1f}cm, 오른쪽: {distRight:.1f}cm")
+
+			# === 3. 더 넓은 방향 선택 ===
+			direction = "left" if distLeft > distRight else "right"
+			diff = abs(distLeft - distRight)
+			print(f"더 넓은 방향: {direction} (차이 {diff:.1f}cm)")
+
+			# === 4. 선택된 방향 전방 거리 확인 ===
+			# 좌우 차이 너무 작으면 → 랜덤 회전
+			if diff < 5:
+				random_dir = random.choice(["left", "right"])
+				print(f"좌우 거리 차이 작음 → 임시 랜덤 회전: {random_dir}")
+				move.move(50, -1, "mid")
+				time.sleep(0.5)
+				scGear.moveAngle(0, 40 if random_dir == "left" else -40)
+				move.move(50, 1, random_dir)
+				time.sleep(2.5)
+				move.motorStop()
+				time.sleep(0.3)
+				return
+
+			# 선택된 방향으로 머리 돌려 전방 확인
+			scGear.moveAngle(1, -45 if direction == "left" else 45)
+			time.sleep(0.2)
+			distForward = sum(self.distRedress() for _ in range(3)) / 3
+			distForward = min(round(distForward, 1), 150)
+			scGear.moveAngle(1, 0)
+			print(f"{direction} 방향 전방 거리: {distForward:.1f}cm")
+
+			# === 5. 거리 판단 ===
+			if distForward >= 60:
+				print(f"{direction} 방향 전방 확보 → 이동")
+				move.move(50, -1, "mid")  # 살짝 후진
+				time.sleep(0.5)
+
+				if direction == "left":
+					scGear.moveAngle(0, 20)
+					move.move(50, 1, "left")
+				else:
+					scGear.moveAngle(0, -20)
+					move.move(50, 1, "right")
+
+				time.sleep(0.7)  # 회피 후 안정화 대기
+				move.motorStop()
+				time.sleep(0.3)
+
+			else:
+				# === 6. 랜덤 방향 선택 ===
+				random_dir = random.choice(["left", "right"])
+				print(f"랜덤 방향 선택: {random_dir}")
+
+				# 후진
+				move.move(50, -1, "mid")
+				time.sleep(0.5)
+
+				scGear.moveAngle(0, 20 if random_dir == "left" else -20)
+				time.sleep(0.3)
+
+				distRandom = sum(self.distRedress() for _ in range(3)) / 3
+				distRandom = min(round(distRandom, 1), 150)
+				print(f"랜덤 방향 전방 거리: {distRandom:.1f}cm")
+
+				if distRandom >= 60:
+					print("랜덤 방향 전방 확보 → 이동")
+					move.move(50, 1, random_dir)
+					time.sleep(0.6)
+				else:
+					print("양쪽 모두 장애물 감지 → 후진")
+					move.move(50, -1, "mid")
+					time.sleep(0.3)
+
+				move.motorStop()
+				time.sleep(0.4)
+
+		else:		# The distance is less than 30cm, back.
+			print("장애물 너무 가까움 → 긴급 후진")
+			scGear.moveAngle(0, 0)
+			move.move(50, -1, "mid")
+			time.sleep(0.5)
+			move.motorStop()
+			time.sleep(0.3)		
 
 
 

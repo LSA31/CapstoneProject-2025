@@ -259,6 +259,14 @@ class ServoCtrl(threading.Thread):
         self.lastPos[ID] = self.nowPos[ID]
         self.set_angle(ID, self.nowPos[ID])
 
+        if ID == 1:
+            # 머리 서보는 힘 3배로 (신호 3번 반복)
+            for _ in range(3):
+                self.set_angle(ID, self.nowPos[ID])
+                time.sleep(0.01)
+        else:
+            # 나머지는 기본 1회
+            self.set_angle(ID, self.nowPos[ID])
 
     def scMove(self):
         if self.scMode == 'init':

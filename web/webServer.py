@@ -413,7 +413,7 @@ async def recv_msg(websocket):
         response = json.dumps(response)
         await websocket.send(response)
 
-async def main_logic(websocket, path):
+async def main_logic(websocket):
     await check_permit(websocket)
     await recv_msg(websocket)
 
@@ -427,43 +427,42 @@ if __name__ == '__main__':
     flask_app.startthread()
 
     try:
-        # global WS2812
         robotlight_check = robotLight.check_rpi_model()
         if robotlight_check == 5:
             print("\033[1;33m WS2812 officially does not support Raspberry Pi 5 for the time being, and the WS2812 LED cannot be used on Raspberry Pi 5.\033[0m")
-            WS2812_mark = 0 # WS2812 not compatible
+            WS2812_mark = 0
         else:
             print("WS2812 success!")
             WS2812_mark = 1
-            WS2812=robotLight.RobotWS2812()
+            WS2812 = robotLight.RobotWS2812()
             WS2812.start()
             WS2812.breath(70,70,255)
-    except:
+    except Exception:
         print('Use "sudo pip3 install rpi_ws281x" to install WS_281x package\n使用"sudo pip3 install rpi_ws281x"命令来安装rpi_ws281x')
         pass
 
-    RL=robotLight.RobotLight()
+    RL = robotLight.RobotLight()
 
-    while  1:
-        wifi_check()
-        try:                  #Start server,waiting for client
-            start_server = websockets.serve(main_logic, '0.0.0.0', 8888)
-            asyncio.get_event_loop().run_until_complete(start_server)
-            print('waiting for connection...')
-            break
-        except Exception as e:
-            print(e)
-            if WS2812_mark:
-                WS2812.setColor(0,0,0)
-            else:
-                pass
+    # 한 번만 체크하면 충분
+    wifi_check()
+
+    import contextlib
+
+    async def ws_main():
+        # 이벤트 루프가 "실행 중"일 때 서버 객체를 만들어야 함
+        async with websockets.serve(main_logic, '0.0.0.0', 8888):
+            print('WS listening on 0.0.0.0:8888, waiting for connection...')
+            await asyncio.Future()  # forever
 
     try:
-        asyncio.get_event_loop().run_forever()
+        asyncio.run(ws_main())
+    except KeyboardInterrupt:
+        pass
     except Exception as e:
-        print(e)
-        if WS2812_mark:
-            WS2812.setColor(0,0,0)
-        else:
-            pass
-        move.destroy()
+        print('WS server error:', e)
+    finally:
+        with contextlib.suppress(Exception):
+            if 'WS2812' in globals() and hasattr(WS2812, 'setColor'):
+                WS2812.setColor(0,0,0)
+        with contextlib.suppress(Exception):
+            move.destroy()
