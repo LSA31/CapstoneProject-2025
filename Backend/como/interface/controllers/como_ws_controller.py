@@ -31,6 +31,9 @@ class AnswerRequest(BaseModel):
 # 연결된 하드웨어 클라이언트 저장소 (deviceId -> WebSocket)
 connected_clients = {}
 
+# 연결된 친밀도 변화 클라이언트 저장소
+connected_affinity_clients = set()
+
 
 @router.websocket("/hardware")
 async def hardware_ws(websocket: WebSocket):
@@ -94,16 +97,24 @@ async def hardware_ws(websocket: WebSocket):
                 continue
 
             logger.info(f"device_id={device_id}, event={event_type} 처리됨")
-            await websocket.send_json(
-                {
-                    "status": "ok",
-                    "event": event_type,
-                }
-            )
+            # 친밀도 변화 브로드캐스트
+            for client in list(connected_affinity_clients):
+                try:
+                    await client.send_json(
+                        {
+                            "event": "AFFINITY_CHANGE",
+                            "deviceId": device_id,
+                            "newExperience": como.experience,
+                            "newLevel": como.level,
+                        }
+                    )
+                except Exception as e:
+                    logger.warning(f"친밀도 WS 전송 실패: {e}")
+
+            await websocket.send_json({"status": "ok", "event": event_type})
 
     except WebSocketDisconnect:
         logger.warning("하드웨어 연결 끊김")
-
         for k, v in list(connected_clients.items()):
             if v == websocket:
                 del connected_clients[k]
@@ -151,3 +162,17 @@ async def send_answer(req: AnswerRequest):
     else:
         logger.warning(f"AI 응답 전송 실패: {req.device_id} 하드웨어 미연결 상태")
         return {"error": "device not connected"}
+
+
+@router.websocket("/affinity")
+async def affinity_ws(websocket: WebSocket):
+    await websocket.accept()
+    connected_affinity_clients.add(websocket)
+    logger.info("친밀도 변화 WS 연결됨")
+
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        connected_affinity_clients.remove(websocket)
+        logger.info("친밀도 변화 WS 연결 종료됨")
