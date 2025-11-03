@@ -53,7 +53,5 @@ class Container(containers.DeclarativeContainer):
 
     ai_ws_client = providers.Singleton(
         AIWebSocketClient,
-        url=os.getenv(
-            "AI_WS_URL", "ws://localhost:8000/ws"
-        ),  # TODO: .env 파일에 AI 웹소켓 주소 AI_WS_URL 추가
+        url=os.getenv("AI_WS_URL", "ws://localhost:8000/ws"),
     )

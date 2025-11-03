@@ -16,6 +16,7 @@ container.wire(
     modules=[
         "user.interface.controllers.user_controller",
         "diary.interface.controllers.diary_controller",
+        "como.interface.controllers.como_ws_controller",
     ]
 )
 

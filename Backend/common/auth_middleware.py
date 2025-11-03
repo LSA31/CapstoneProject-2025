@@ -17,6 +17,7 @@ def create_middlewares(app: FastAPI):
     @app.middleware("http")
     async def set_current_user(request: Request, call_next):
         authorization = request.headers.get("Authorization")
+
         if authorization and authorization.startswith("Bearer "):
             token = authorization.split(" ")[1]
             try:
