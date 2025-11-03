@@ -43,6 +43,11 @@ async def hardware_ws(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
+
+            if data.get("fromServer"):
+                logger.debug("서버발 이벤트 echo 감지 → 무시")
+                continue
+
             device_id = data.get("deviceId")
             event_type = data.get("event")  # "REGISTER", "TOUCH" / "TALK"
 
