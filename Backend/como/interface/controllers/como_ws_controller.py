@@ -55,7 +55,7 @@ async def hardware_ws(websocket: WebSocket):
                 como = service.repo.get_by_device_id(device_id)
                 if como:
                     user_id = como.owner_id
-                    connected_clients[user_id] = websocket
+                    connected_clients[device_id] = websocket
                     logger.info(f"REGISTER 성공: {device_id} → {user_id}")
 
                     await websocket.send_json(
