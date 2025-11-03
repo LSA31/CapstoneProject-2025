@@ -9,12 +9,13 @@ export type ComoCreatePayload = {
 export async function createComo(payload: ComoCreatePayload) {
   // Try a reasonable endpoint; backend may vary (adjust if your API differs)
   try {
-    const res = await api.post('/comos', payload);
+    // prefer singular endpoint if backend exposes /como
+    const res = await api.post('/como', payload);
     return res.data;
   } catch (e) {
     try {
-      // fallback to singular endpoint
-      const res2 = await api.post('/como', payload);
+      // fallback to plural if singular not present
+      const res2 = await api.post('/comos', payload);
       return res2.data;
     } catch (e2) {
       // rethrow original error to caller

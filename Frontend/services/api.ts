@@ -51,6 +51,12 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-ignore - axios headers typing here is flexible for RN setup
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      // helpful debug: warn when no token is present so we can trace 401s during development
+      try {
+        // eslint-disable-next-line no-console
+        console.warn('[api] no accessToken found in AsyncStorage — requests will be unauthenticated');
+      } catch (ee) {}
     }
   } catch (e) {
     // ignore

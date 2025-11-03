@@ -182,19 +182,19 @@ export default function DiaryScreen() {
           {(!dateParam && nowHour < 21) ? (
             loading ? (
               <ActivityIndicator />
-            ) : diary ? (
+            ) : (diary && diary.content) ? (
               <Text style={styles.diaryText}>{diary.content}</Text>
             ) : (
-              <Text style={styles.diaryText}>오늘 하루 일기를 만들고 있어요… 오늘 저녁 9시에 볼 수 있어요</Text>
+              <Text style={styles.diaryText}>오늘 하루 일기를 만들고 있어요…{"\n"}오늘 저녁 9시에 볼 수 있어요</Text>
             )
           ) : (
             loading ? (
               <ActivityIndicator />
-            ) : diary ? (
+            ) : (diary && diary.content) ? (
               <Text style={styles.diaryText}>{diary.content}</Text>
             ) : (
               <Text style={styles.placeholderText}>
-                아직 일기가 없습니다. {withWaOrGwa(petName)} 대화를 나누고 하루를 기록해보세요.
+                아직 일기가 없습니다. {withWaOrGwa(petName)}와 대화를 나누고 하루를 기록해보세요.
               </Text>
             )
           )}
