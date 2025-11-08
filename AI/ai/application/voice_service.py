@@ -39,20 +39,38 @@ async def speech_to_text(audio_bytes: bytes, filename: str) -> str:
     audio_buffer = io.BytesIO(audio_bytes)
     audio_buffer.name = filename
     try:
+        # 강제 한국어 인식: language="ko"
         result = client.audio.transcriptions.create(
             model="gpt-4o-mini-transcribe",
-            file=audio_buffer
+            file=audio_buffer,
+            language="ko",
         )
         return result.text
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"STT에서 문제가 발생했습니다: {e}")
     
 
-async def get_response(request: str) -> str:
+async def get_response(request: str, persona: str | None = None) -> str:
+    """Generate assistant reply. If persona=='como', prepend a system prompt
+    that instructs the model to act as an AI pet dog named 'Como'."""
     try:
+        messages = []
+        if persona == "como":
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        "당신은 코모(Como)라는 이름의 친절한 AI 애완견입니다. "
+                        "사용자에게 친근하고 간결하게, 애정 어린 톤으로 대답하세요."
+                    ),
+                }
+            )
+
+        messages.append({"role": "user", "content": request})
+
         completion = client.chat.completions.create(
             model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": request}]
+            messages=messages,
         )
         reply = completion.choices[0].message.content.strip()
     except Exception as e:
