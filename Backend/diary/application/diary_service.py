@@ -25,7 +25,9 @@ class DiaryService:
         # 이미 오늘 다이어리가 있는지 확인
         existing = self.repo.find_by_date(author_id, today)
         if existing:
-            # audio_url만 append해서 업데이트
+            existing.content = content
+            existing.advice = advice
+            existing.emo_tag = emo_tag
             updated_audio = existing.audio_url + audio_url
             existing.audio_url = updated_audio
             return self.repo.save(existing)
@@ -54,9 +56,11 @@ class DiaryService:
     def find_by_date(self, author_id: str, date: str) -> Optional[Diary]:
         return self.repo.find_by_date(author_id, date)
 
-    def append_dialog(self, author_id: str, date: str, user_text: str, assistant_text: str):
+    def append_dialog(
+        self, author_id: str, date: str, user_text: str, assistant_text: str
+    ):
         lines = [
             {"role": "user", "content": user_text},
-            {"role": "assistant", "content": assistant_text}
+            {"role": "assistant", "content": assistant_text},
         ]
         self.repo.append_dialog(author_id, date, lines)
