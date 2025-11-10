@@ -1,12 +1,13 @@
+import os
+
 from openai import OpenAI
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
-import os
+from typing import Any
 
-import firebase_admin
-from firebase_admin import credentials, firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
+import httpx
+import json
 
 
 load_dotenv()
@@ -15,6 +16,17 @@ client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
 
+# Configuration for remote server
+BASE_URL = "http://3.37.114.206:8080"
+# test account provided by the user request
+_LOGIN_PAYLOAD = {
+    "email": "como_test@test.com",
+    "password": "como1234"
+}
+
+# in-memory token cache for this run
+_TOKEN: str | None = None
+
 async def create_summary_diary(content: str) -> str:
     system_prompt = (
         "당신은 주어진 대화를 받아, 먼저 2~3문장으로 핵심만 간결하게 요약해 일기 형식으로 작성하는 AI 비서입니다."
@@ -22,6 +34,7 @@ async def create_summary_diary(content: str) -> str:
         "말투는 ~였다와 같이 사용자 입장에서 작성해주세요."
     )
     
+    reply = ""
     try:
         completion = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -43,6 +56,7 @@ async def create_diary_answer(content: str) -> str:
         "말투는 친구처럼 자연스럽게 작성해주세요."
     )
     
+    reply = ""
     try:
         completion = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -61,10 +75,11 @@ async def create_diary_tags(content: str) -> list[str]:
     system_prompt = (
         "당신은 사용자의 일기를 받아, 일기에 대한 태그를 생성하는 AI입니다."
         "일기에 대한 태그는 2~3개 정도로 작성해주세요."
-        "태그는 [태그1, 태그2, 태그3] 형식으로 작성해주세요."
+        '태그는 ["태그1", "태그2", "태그3"] 형식으로 작성해주세요.'
         "태그 중 하나는 꼭 감정 표현과 관련된 단어로 작성해주세요."
     )
     
+    reply = ""
     try:
         completion = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -74,78 +89,164 @@ async def create_diary_tags(content: str) -> list[str]:
             ]
         )
         reply = completion.choices[0].message.content.strip()
+        return json.loads(reply)
     except Exception as e:
         print(f"GPT 응답 생성 중 오류가 발생했습니다: {e}")
     return reply
 
-_DB = None
-
-def _init_firebase():
-    global _DB
-    if not firebase_admin._apps:
-        cred_path = os.getenv("FIREBASE_CREDENTIALS")
-        cred = credentials.Certificate(cred_path)
-        firebase_admin.initialize_app(cred)
-    _DB = firestore.client()
+async def _extract_token_from_response(data: dict[str, Any]) -> str | None:
+    return data['id_token']
 
 
-_init_firebase()
-_DIARIES_COL = "diary"
+async def login() -> str:
+    """Authenticate to the remote server and return a Bearer token.
 
-async def get_diary_list(today: str) -> list[dict[str, any]]:
-    def _fetch():
-        col = _DB.collection(_DIARIES_COL)
-        query = col.where(filter=FieldFilter("created_at", "==", today))
-
-        docs = query.stream()
-        items: list[dict[str, any]] = []
-        for doc in docs:
-            data = doc.to_dict() or {}
-            # 안전하게 기본 키만 보장하고, 나머지는 그대로 포함
-            item = {
-                "id": doc.id,
-                "content": data.get("content", ""),
-                "created_at": data.get("created_at"),
-            }
-            # 기타 필드도 유지
-            for k, v in data.items():
-                if k not in item:
-                    item[k] = v
-            items.append(item)
-        return items
-
-    return await asyncio.to_thread(_fetch)
-
-
-async def update_diary(diary_id: str, diary: dict[str, any]) -> None:
+    This will try POST {BASE_URL}/user/login with the fixed test credentials.
+    The function is tolerant to a few common JSON shapes for the returned token.
     """
-    Firestore 'diaries/<diary_id>' 에 diary 내용을 병합 업데이트합니다.
-    기대 필드: summary(str), answer(str), tags(list[str]) 등
-    기존 필드(content, created_at 등)는 유지됩니다.
+    global _TOKEN
+    if _TOKEN:
+        return _TOKEN
+
+    login_url = f"{BASE_URL}/users/login"
+    async with httpx.AsyncClient() as client_http:
+        try:
+            resp = await client_http.post(login_url, json=_LOGIN_PAYLOAD, timeout=10.0)
+        except Exception as e:
+            raise RuntimeError(f"로그인 요청 실패: {e}")
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"로그인 실패: {resp.status_code} - {resp.text}")
+
+    data = {}
+    try:
+        data = resp.json()
+    except Exception:
+        raise RuntimeError("로그인 응답이 JSON이 아닙니다")
+
+    token = await _extract_token_from_response(data)
+    if not token:
+        raise RuntimeError(f"토큰 파싱 실패: {data}")
+
+    _TOKEN = token
+    return _TOKEN
+
+
+async def get_diary(today: str) -> dict[str, Any] | None:
+    """GET /diaries/today?date=YYYY-MM-DD and return the diary entry (raw JSON object).
+
+    Expects the server to accept a query param `date`.
     """
+    token = await login()
+    url = f"{BASE_URL}/diaries"
+    headers = {"Authorization": f"Bearer {token}"}
+    async with httpx.AsyncClient() as client_http:
+        try:
+            resp = await client_http.get(url, params={"date": today}, headers=headers, timeout=15.0)
+        except Exception as e:
+            print(f"다이어리 목록 요청 실패: {e}")
+            return []
 
-    def _update():
-        doc_ref = _DB.collection(_DIARIES_COL).document(diary_id)
-        # 병합 업데이트(merge=True): 없는 필드만 추가/기존은 덮어씀, 다른 필드는 유지
-        doc_ref.set(diary, merge=True)
+    if resp.status_code != 200:
+        print(f"다이어리 목록 불러오기 실패: {resp.status_code} - {resp.text}")
+        return []
 
-    await asyncio.to_thread(_update)
+    data = {}
+    for res in resp.json():
+        if res.get("date") == today:
+            return res
+
+    # unknown shape
+    print("다이어리 목록 응답이 예상 형식이 아닙니다", data)
+    return []
+
+
+async def post_diary(content: str, advice: str, emo_tag: list[str]) -> bool:
+    """POST /diaries with the required payload.
+
+    Body:
+    {
+      "content": "string",
+      "advice": "string",
+      "audio_url": [],
+      "emo_tag": []
+    }
+    """
+    token = await login()
+    url = f"{BASE_URL}/diaries"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {
+        "content": content,
+        "advice": advice,
+        "audio_url": [],
+        "emo_tag": emo_tag or []
+    }
+    async with httpx.AsyncClient() as client_http:
+        try:
+            print("Posting payload to server:", json.dumps(payload, ensure_ascii=False))
+            resp = await client_http.post(url, json=payload, headers=headers, timeout=15.0)
+        except Exception as e:
+            print(f"다이어리 생성 요청 실패: {e}")
+            return False
+
+    # Print response status and body for debugging persistence issues
+    print(f"POST {url} -> status: {resp.status_code}")
+    # try to print JSON body if possible, otherwise raw text
+    try:
+        resp_json = resp.json()
+        print("Response JSON:", json.dumps(resp_json, ensure_ascii=False))
+    except Exception:
+        print("Response text:", resp.text)
+
+    if resp.status_code not in (200, 201):
+        print(f"다이어리 생성 실패: {resp.status_code} - {resp.text}")
+        return False
+
+    return True
 
 async def create_diary() -> None:
     today = datetime.now().strftime("%Y-%m-%d")
-    diary_list = await get_diary_list(today)
+    diary = await get_diary(today)
+    # source_text: prefer 'dialog' column, fallback to existing 'content'
+    if not diary:
+        print("오늘 다이어리가 없습니다.")
+        return
 
-    for diary in diary_list:
-        summary_diary = await create_summary_diary(diary["content"])
-        diary_answer = await create_diary_answer(summary_diary)
-        diary_tags = await create_diary_tags(summary_diary)
+    # dialog may be a list of messages -> join their 'content' fields
+    dialog = diary.get("dialog") or diary.get("content") or ""
+    if isinstance(dialog, list):
+        parts = [msg.get("content", "") for msg in dialog if isinstance(msg, dict) and msg.get("content")]
+        source_text = "\n".join(parts)
+    else:
+        source_text = str(dialog)
 
-        diary["summary"] = summary_diary
-        diary["answer"] = diary_answer
-        diary["tags"] = diary_tags
+    if not source_text or not source_text.strip():
+        print("dialog/내용이 비어있어 요약할 텍스트가 없습니다.")
+        return
 
-        print(diary)
-        await update_diary(diary["id"], diary)
+    print("source_text (truncated 500 chars):", source_text[:500])
+
+    summary_diary = await create_summary_diary(source_text)
+    print("summary_diary:", summary_diary)
+
+    diary_answer = await create_diary_answer(summary_diary)
+    print("diary_answer:", diary_answer)
+
+    diary_tags = await create_diary_tags(summary_diary)
+    print("diary_tags:", diary_tags)
+
+    # ensure tags is a list
+    if not isinstance(diary_tags, list):
+        diary_tags = [str(diary_tags)] if diary_tags else []
+
+    ok = await post_diary(summary_diary, diary_answer, diary_tags)
+    if ok:
+        # try to print useful id fields from fetched diary (may differ by backend)
+        id_field = diary.get('id') or diary.get('diary_id') or diary.get('user_id') or diary.get('author_id')
+        print(f"다이어리 생성 성공: {id_field}")
+    else:
+        id_field = diary.get('id') or diary.get('diary_id') or diary.get('user_id') or diary.get('author_id')
+        print(f"다이어리 생성 실패: {id_field}")
 
 
 if __name__ == "__main__":
