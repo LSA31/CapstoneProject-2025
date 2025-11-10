@@ -1,4 +1,5 @@
 import os
+import ulid
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -94,7 +95,11 @@ class FirebaseDiaryRepository(DiaryRepository):
 
     def append_dialog(self, author_id: str, date: str, lines: List[str]):
         """Diary 문서의 dialog 필드에 한 턴(user+assistant)을 누적 저장"""
-        ref = self._collection(author_id).document(date)
+        existing = self.find_by_date(author_id, date)
+        if existing:
+            ref = self._collection(author_id).document(existing.diary_id)
+        else:
+            ref = self._collection(author_id).document(str(ulid.new()))
 
         # 문서가 없으면 새로 생성
         if not ref.get().exists:
