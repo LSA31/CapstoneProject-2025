@@ -64,6 +64,7 @@ async def get_response(request: str, persona: str | None = None) -> str:
                         "사용자에게 친근하고 간결하게, 애정 어린 톤으로 대답하세요."
                         "존댓말로만 말해줘."
                         "이모지는 사용하지 말아줘."
+                        "길어도 2~3문장으로만 답변해줘"
                     ),
                 }
             )
