@@ -25,6 +25,7 @@ import { sendHardwareEvent } from '../services/hardware';
 import { getDeviceId } from '../utils/device';
 import { getComo } from '../services/como';
 import { endWalk } from '../services/walk';
+import { startAffinitySocket, stopAffinitySocket } from '../services/affinity';
 
 const screenWidth = Dimensions.get("window").width;
 const screenHeight = Dimensions.get("window").height;
@@ -70,6 +71,8 @@ export default function MainScreen() {
   const happyTimeoutRef = useRef<number | null>(null);
   const [isHappyActive, setIsHappyActive] = useState(false);
   const [isWalkingActive, setIsWalkingActive] = useState(false);
+
+  
 
   // local quotes array for MainScreen - rotates on mount / when app becomes active
   const QUOTES = [
@@ -438,10 +441,16 @@ export default function MainScreen() {
         if (res.was_hungry) setIsHungry(true); else setIsHungry(false);
       } catch (e) {
         // fallback: local increment
+        try {
+          // eslint-disable-next-line no-console
+          console.warn('[MainScreen] sendEvent PLAY failed', e);
+        } catch (ee) {}
+        // optionally fallback to local XP increment
         // addXp(1);
       }
     })();
   };
+
 
   const handleToggleTalking = async () => {
     // toggle local state and notify hardware
@@ -617,6 +626,119 @@ export default function MainScreen() {
     return () => sub.remove();
   }, []);
 
+  // start websocket listener for affinity updates (ws/affinity)
+  useEffect(() => {
+    const stop = startAffinitySocket(async (msg: any) => {
+      try {
+  // If the websocket message already contains useful fields, apply them immediately
+        // so the UI reflects changes without waiting for GET /como. Otherwise fall back to GET /como.
+        const payload = msg && typeof msg === 'object' ? msg : null;
+        let usedPayload = false;
+
+        if (payload) {
+          try {
+            // quick-path: apply fields present in the payload
+            if (payload.name) {
+              setPetName(payload.name);
+              usedPayload = true;
+            }
+            if (typeof payload.experience === 'number') {
+              setXp(payload.experience);
+              const newLevel = getLevelFromXp(payload.experience);
+              setLevel(newLevel);
+              await persistXpLevel(payload.experience, newLevel);
+              usedPayload = true;
+            }
+            if (typeof payload.level === 'number') {
+              setLevel(payload.level);
+              await AsyncStorage.setItem(LEVEL_KEY, String(payload.level));
+              usedPayload = true;
+            }
+            const affinityVal = (typeof payload.affinity === 'number' && payload.affinity)
+              || (typeof payload.affection === 'number' && payload.affection)
+              || (typeof payload.friendship === 'number' && payload.friendship)
+              || (typeof payload.like === 'number' && payload.like);
+            if (typeof affinityVal === 'number') {
+              let v = affinityVal;
+              if (v > 1) v = Math.min(1, v / 100);
+              setFriendship(Math.max(0, Math.min(1, v)));
+              startHappyAnimation();
+              usedPayload = true;
+            }
+            if (typeof payload.state === 'string') {
+              const s = payload.state.toUpperCase();
+              if (s === 'HUNGRY') {
+                await AsyncStorage.removeItem(LAST_FED_KEY);
+                setIsHungry(true);
+              } else {
+                const today = getTodayString();
+                await AsyncStorage.setItem(LAST_FED_KEY, today);
+                setIsHungry(false);
+              }
+              usedPayload = true;
+            }
+          } catch (ee) {
+            // ignore payload apply errors and fall back to GET
+            usedPayload = false;
+          }
+        }
+
+        if (!usedPayload) {
+          // fallback: re-fetch latest Como so UI can update
+          try {
+            const c = await getComo();
+            if (!c) return;
+            try {
+              if (c.name) setPetName(c.name);
+              if (typeof c.experience === 'number') {
+                setXp(c.experience);
+                const newLevel = getLevelFromXp(c.experience);
+                setLevel(newLevel);
+                await persistXpLevel(c.experience, newLevel);
+              }
+              if (typeof c.level === 'number') {
+                setLevel(c.level);
+                await AsyncStorage.setItem(LEVEL_KEY, String(c.level));
+              }
+              const affinityVal = (typeof c.affinity === 'number' && c.affinity)
+                || (typeof c.affection === 'number' && c.affection)
+                || (typeof c.friendship === 'number' && c.friendship)
+                || (typeof c.like === 'number' && c.like);
+              if (typeof affinityVal === 'number') {
+                let v = affinityVal;
+                if (v > 1) v = Math.min(1, v / 100);
+                setFriendship(Math.max(0, Math.min(1, v)));
+                startHappyAnimation();
+              }
+              if (typeof c.state === 'string') {
+                const s = c.state.toUpperCase();
+                if (s === 'HUNGRY') {
+                  await AsyncStorage.removeItem(LAST_FED_KEY);
+                  setIsHungry(true);
+                } else {
+                  const today = getTodayString();
+                  await AsyncStorage.setItem(LAST_FED_KEY, today);
+                  setIsHungry(false);
+                }
+              }
+            } catch (ee) {
+              // ignore per-field sync errors
+            }
+          } catch (e) {
+            // ignore fetch errors
+          }
+        }
+        
+      } catch (e) {
+        // ignore top-level errors
+      }
+    });
+    return () => {
+      try { stop && stop(); } catch (e) {}
+      try { stopAffinitySocket(); } catch (e) {}
+    };
+  }, []);
+
   const handleFeed = () => {
     increaseFriendship();
     startHappyAnimation();
@@ -670,6 +792,10 @@ export default function MainScreen() {
   await AsyncStorage.setItem(LAST_FED_KEY, (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })());
       } catch (e) {
         // fallback: local behavior
+        try {
+          // eslint-disable-next-line no-console
+          console.warn('[MainScreen] sendEvent FEED failed', e);
+        } catch (ee) {}
         (async () => {
             try {
               await AsyncStorage.setItem(LAST_FED_KEY, (() => { const d = new Date(); const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, '0'); const day = String(d.getDate()).padStart(2, '0'); return `${y}-${m}-${day}`; })());
@@ -732,7 +858,6 @@ export default function MainScreen() {
   const handleSave = () => {
     // 구해주기 동작 (임시: 친밀도 증가)
     increaseFriendship();
-    startHappyAnimation();
     // 구해주기: +2XP
     // addXp(2);
     // send BACK to hardware
@@ -740,6 +865,14 @@ export default function MainScreen() {
       try {
         const deviceId = await getDeviceId();
         await sendHardwareEvent(deviceId, 'BACK');
+        // After save, if the UI is currently showing '멈춤' (isMoving === true),
+        // switch it to stopped so the button shows '움직이기'.
+        // Do not send hardware STOP here; just update UI state per UX request.
+        try {
+          if (isMoving) setIsMoving(false);
+        } catch (ee) {
+          // ignore
+        }
       } catch (e) {
         console.warn('sendHardwareEvent (BACK) failed', e);
       }
@@ -875,7 +1008,7 @@ export default function MainScreen() {
               />
 
               <View style={{ width: '100%', alignItems: 'center', marginVertical: 10, top: 120 }}>
-                <View style={{ transform: [{ translateX: -12 }, { scaleX: 1.7 }, { scaleY: 1.7 }], marginBottom: 6 }}>
+                <View style={{ transform: [{ translateX: 0 }, { scaleX: 1.7 }, { scaleY: 1.7 }], marginBottom: 6 }}>
                   <Switch
                     trackColor={{ false: "#767577", true: "#715C46" }}
                     thumbColor={isTalking ? "#443627" : "#443627"}

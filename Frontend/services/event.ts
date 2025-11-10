@@ -34,13 +34,25 @@ export async function sendEvent(eventType: AppEventType): Promise<AppEventRespon
   try {
     const headers: any = {};
     if (token) headers.Authorization = `Bearer ${token}`;
+    // debug: log outgoing event for dev tracing
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[event] POST /como/event', { body, hasToken: !!token });
+    } catch (ee) {}
     const res = await api.post('/como/event', body, { headers });
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[event] /como/event response', { status: res.status, dataPreview: res.data && typeof res.data === 'object' ? Object.keys(res.data) : typeof res.data });
+    } catch (ee) {}
     return res.data as AppEventResponse;
   } catch (err: any) {
     const status = err?.response?.status;
-    if (status === 401) {
+    // debug log full error for dev
+    try {
       // eslint-disable-next-line no-console
-      console.warn('[event] /como/event returned 401', err?.response?.data || err?.response?.statusText || err);
+      console.warn('[event] /como/event failed', { status, data: err?.response?.data, message: err?.message });
+    } catch (ee) {}
+    if (status === 401) {
       throw Object.assign(new Error('Unauthorized (401) from server when calling /como/event'), { code: 'UNAUTHORIZED' });
     }
     // bubble up other errors

@@ -24,8 +24,15 @@ export default function DiaryList() {
         const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const res = await listDiaries(iso);
         if (!mounted) return;
-        setItems(res || []);
-        setDebugMsg(`loaded ${res?.length ?? 0} items`);
+        // filter out entries with empty/blank content so they are not shown
+        const filtered = (res || []).filter((it: DiaryItem) => typeof it.content === 'string' && it.content.trim().length > 0);
+        setItems(filtered);
+        // only show debug message when there are visible items
+        if (filtered.length > 0) {
+          setDebugMsg(`loaded ${filtered.length} items`);
+        } else {
+          setDebugMsg(null);
+        }
       } catch (e: any) {
         console.warn('list diaries failed', e);
         if (mounted) setItems([]);
@@ -55,7 +62,9 @@ export default function DiaryList() {
     </SafeAreaView>
   );
 
-  if (!items || items.length === 0) {
+  const visibleItems = (items || []).filter((it) => typeof it.content === 'string' && it.content.trim().length > 0);
+
+  if (visibleItems.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { paddingTop: topPadding }]}>
         <View style={styles.screenHeader}>
@@ -69,15 +78,16 @@ export default function DiaryList() {
         </View>
         {debugMsg ? <Text style={{ textAlign: 'center', marginTop: 8, color: '#999' }}>{debugMsg}</Text> : null}
         <Text style={{ textAlign: 'center', marginTop: 24, color: '#666' }}>아직 작성된 일기가 없습니다.</Text>
-        <TouchableOpacity style={styles.refreshButton} onPress={() => {
+          <TouchableOpacity style={styles.refreshButton} onPress={() => {
           // simple retry: reload by resetting state and triggering effect
           setItems(null);
           setLoading(true);
           (async () => {
             try {
-              const res = await listDiaries();
-              setItems(res || []);
-              setDebugMsg(`loaded ${res?.length ?? 0} items`);
+                const res = await listDiaries();
+                const filtered = (res || []).filter((it: DiaryItem) => typeof it.content === 'string' && it.content.trim().length > 0);
+                setItems(filtered);
+                if (filtered.length > 0) setDebugMsg(`loaded ${filtered.length} items`); else setDebugMsg(null);
             } catch (e: any) {
               setDebugMsg(String(e?.message || e));
             } finally {
@@ -104,7 +114,7 @@ export default function DiaryList() {
         <View style={{ width: 76 }} />
       </View>
       <FlatList
-        data={items}
+        data={visibleItems}
         keyExtractor={(item) => item.diary_id}
         renderItem={({ item }) => (
           <TouchableOpacity

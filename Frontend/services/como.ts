@@ -11,16 +11,15 @@ export async function createComo(payload: ComoCreatePayload) {
   try {
     // prefer singular endpoint if backend exposes /como
     const res = await api.post('/como', payload);
+    console.log('[createComo] /como created', res.status, res.data);
     return res.data;
-  } catch (e) {
-    try {
-      // fallback to plural if singular not present
-      const res2 = await api.post('/comos', payload);
-      return res2.data;
-    } catch (e2) {
-      // rethrow original error to caller
-      throw e;
-    }
+  } catch (e: any) {
+    // Log helpful debug info and rethrow - backend should implement /como
+    console.warn('[createComo] POST /como failed', {
+      status: e?.response?.status,
+      message: e?.message,
+    });
+    throw e;
   }
 }
 
@@ -29,12 +28,9 @@ export async function getComo() {
     const res = await api.get('/como');
     return res.data;
   } catch (e: any) {
-    try {
-      const res2 = await api.get('/comos');
-      return res2.data;
-    } catch (e2: any) {
-      throw e;
-    }
+    // No plural fallback: the backend for this project should expose /como.
+    console.warn('[getComo] GET /como failed', { status: e?.response?.status, message: e?.message });
+    throw e;
   }
 }
 
