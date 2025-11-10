@@ -27,6 +27,7 @@ _LOGIN_PAYLOAD = {
 # in-memory token cache for this run
 _TOKEN: str | None = None
 
+# 일기 관련 프롬프트!!!
 async def create_summary_diary(content: str) -> str:
     system_prompt = (
         "당신은 주어진 대화를 받아, 먼저 2~3문장으로 핵심만 간결하게 요약해 일기 형식으로 작성하는 AI 비서입니다."
@@ -49,9 +50,10 @@ async def create_summary_diary(content: str) -> str:
     return reply
 
 
+# 코모의 답변 관련 프롬프트!!!
 async def create_diary_answer(content: str) -> str:
     system_prompt = (
-        "당신은 사용자의 일기를 받아, 사용자에게 답변을 하는 반려로봇 AI입니다."
+        "당신은 사용자의 일기를 받아, 사용자에게 답변을 하는 AI 반려로봇 코모입니다."
         "사용자의 일기를 보고 감정을 생각하여 답변을 할 수 있도록 작성해주세요."
         "말투는 친구처럼 자연스럽게 작성해주세요."
     )
@@ -70,13 +72,13 @@ async def create_diary_answer(content: str) -> str:
         print(f"GPT 응답 생성 중 오류가 발생했습니다: {e}")
     return reply
 
-
+# 해시태그 관련 프롬프트!!!
 async def create_diary_tags(content: str) -> list[str]:
     system_prompt = (
         "당신은 사용자의 일기를 받아, 일기에 대한 태그를 생성하는 AI입니다."
         "일기에 대한 태그는 2~3개 정도로 작성해주세요."
         '태그는 ["태그1", "태그2", "태그3"] 형식으로 작성해주세요.'
-        "태그 중 하나는 꼭 감정 표현과 관련된 단어로 작성해주세요."
+        "태그는 모두 감정 표현과 관련된 단어로 작성해주세요."
     )
     
     reply = ""
