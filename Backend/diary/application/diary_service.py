@@ -14,10 +14,10 @@ class DiaryService:
     def create(
         self,
         author_id: str,
-        content: str,
-        advice: str | None,
-        audio_url: list[str],
-        emo_tag: list[str],
+        content: Optional[str] = None,
+        advice: Optional[str] = None,
+        audio_url: Optional[list[str]] = None,
+        emo_tag: Optional[list[str]] = None,
         date: Optional[str] = None,
     ) -> Diary:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -25,11 +25,15 @@ class DiaryService:
         # 이미 오늘 다이어리가 있는지 확인
         existing = self.repo.find_by_date(author_id, today)
         if existing:
-            existing.content = content
-            existing.advice = advice
-            existing.emo_tag = emo_tag
-            updated_audio = existing.audio_url + audio_url
-            existing.audio_url = updated_audio
+            if content is not None:
+                existing.content = content
+            if advice is not None:
+                existing.advice = advice
+            if emo_tag:
+                existing.emo_tag = emo_tag
+            if audio_url:
+                existing.audio_url += audio_url
+
             return self.repo.save(existing)
 
         diary = Diary(

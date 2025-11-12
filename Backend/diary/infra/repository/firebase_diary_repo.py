@@ -34,6 +34,7 @@ class FirebaseDiaryRepository(DiaryRepository):
                 "createdAt": diary.created_at.isoformat(),
                 "date": diary.date,
             },
+            merge=True,
         )
         return diary
 
@@ -113,7 +114,8 @@ class FirebaseDiaryRepository(DiaryRepository):
                     "audioUrl": [],
                     "emoTag": [],
                     "createdAt": datetime.now(timezone.utc).isoformat(),
-                }
+                },
+                merge=True,
             )
 
         # Firestore ArrayUnion으로 append

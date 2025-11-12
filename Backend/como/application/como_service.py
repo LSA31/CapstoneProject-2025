@@ -18,7 +18,7 @@ class ComoService:
             level=1,
             experience=0,
             feeding_count_today=0,
-            last_connected_at=datetime.now(timezone.utc)
+            last_connected_at=datetime.now(timezone.utc),
         )
         return self.repo.save(como)
 
@@ -82,20 +82,21 @@ class ComoService:
             como.state = ComoState.HAPPY
             self._check_level_up(como)
 
+            # 일시적으로 HAPPY 상태 응답용으로 내려보내기
             response_como = self.repo.save(como)
             response_como.was_hungry = was_hungry
 
-            # FEED일 경우엔 무조건 BASIC으로 복귀
-            if event_type == "FEED":
-                como.state = ComoState.BASIC
-            else:
-                # PLAY일 경우엔 이전 상태가 HUNGRY면 다시 HUNGRY로 복귀
-                como.state = (
+            # 프론트에는 HAPPY 상태 전달 후 바로 복귀 상태로 DB에 저장
+            como.state = (
+                ComoState.BASIC
+                if event_type == "FEED"
+                else (
                     previous_state
                     if previous_state == ComoState.HUNGRY
                     else ComoState.BASIC
                 )
-
+            )
+            # 이때 경험치, feeding_count_today 유지됨
             self.repo.save(como)
 
             return response_como

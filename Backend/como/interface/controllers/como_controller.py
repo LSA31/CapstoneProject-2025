@@ -118,10 +118,7 @@ async def upload_como_audio(
 
     diary = diary_service.create(
         author_id=owner_id,
-        content="",
-        advice=None,
         audio_url=[signed_url],
-        emo_tag=[],
     )
 
     await ai_client.send_event(
