@@ -32,6 +32,7 @@ export default function DiaryScreen() {
   }, []);
 
   const [diary, setDiary] = useState<any | null>(null);
+  const [notFoundDetail, setNotFoundDetail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [nowHour, setNowHour] = useState<number>(new Date().getHours());
   const [petName, setPetName] = useState<string>('코모');
@@ -77,7 +78,9 @@ export default function DiaryScreen() {
           res = await getDiaryByDate();
         }
         if (!mounted) return;
-        setDiary(res);
+        // new shape: { diary, notFoundDetail? }
+        setDiary(res?.diary ?? null);
+        setNotFoundDetail(res?.notFoundDetail ?? null);
       } catch (e) {
         console.warn('fetch diary failed', e);
         if (mounted) setDiary(null);
@@ -125,18 +128,32 @@ export default function DiaryScreen() {
     if (navigation && navigation.setOptions) navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  // when rendered from home (not from list) remove top padding so tag row sits closer to the app header
-  const containerStyle: any = [
-    styles.diaryContainer,
-    !fromListContext
-      ? { paddingTop: 0, paddingLeft: 24, paddingRight: 24, paddingBottom: 24, marginTop: -25 }
-      : {},
-  ];
+  // choose separate container styles for today's diary (home) vs previous-diary (from list)
+  const containerStyle: any = fromListContext
+    ? [styles.diaryContainerList]
+    : [styles.diaryContainerToday, { paddingTop: 0, paddingLeft: 24, paddingRight: 24, paddingBottom: 24, marginTop: -25 }];
+
+  // choose diary card variant so we can style today's card differently from historical entries
+  const diaryCardStyle = fromListContext ? styles.diaryCardList : styles.diaryCardToday;
 
   return (
     <SafeAreaView style={containerStyle}>
       <ScrollView style={{ width: '100%', flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+
+        {/* when navigated from the list show a small header with a back button above the emotion tags */}
+        {fromListContext ? (
+          <View style={styles.screenHeader}>
+            <TouchableOpacity onPress={() => {
+              if (navigation && navigation.canGoBack && navigation.canGoBack()) return navigation.goBack();
+              if ((navigation as any).navigate) return (navigation as any).navigate('MainApp');
+            }} style={styles.backButtonHeader} accessibilityLabel="뒤로가기">
+              <Text style={styles.backTextShort}>{'<'}</Text>
+            </TouchableOpacity>
+            <View style={{ width: 76 }} />
+          </View>
+        ) : null}
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: fromListContext ? 32 : 0 }}>
           <Image
             source={require('../assets/heart_como.png')}
             style={{ width: 29, height: 20 }}
@@ -177,7 +194,7 @@ export default function DiaryScreen() {
           ) : <View style={{ width: 76 }} />}
         </View>
 
-        <View style={styles.diaryCard}>
+  <View style={diaryCardStyle}>
           {/* For today's diary before 21:00, show the "waiting until 9PM" message only when there is NO diary yet. */}
           {(!dateParam && nowHour < 21) ? (
             loading ? (
@@ -185,7 +202,7 @@ export default function DiaryScreen() {
             ) : (diary && diary.content) ? (
               <Text style={styles.diaryText}>{diary.content}</Text>
             ) : (
-              <Text style={styles.diaryText}>오늘 하루 일기를 만들고 있어요…{"\n"}오늘 저녁 9시에 볼 수 있어요</Text>
+              <Text style={styles.diaryText}>{notFoundDetail === 'Diary not found for this date' ? '오늘 일기가 아직 없습니다.' : '오늘 하루 일기를 만들고 있어요…{"\n"}오늘 저녁 9시에 볼 수 있어요'}</Text>
             )
           ) : (
             loading ? (
@@ -194,7 +211,7 @@ export default function DiaryScreen() {
               <Text style={styles.diaryText}>{diary.content}</Text>
             ) : (
               <Text style={styles.placeholderText}>
-                아직 일기가 없습니다. {withWaOrGwa(petName)}와 대화를 나누고 하루를 기록해보세요.
+                {notFoundDetail === 'Diary not found for this date' ? '오늘 일기가 아직 없습니다.' : `아직 일기가 없습니다. ${withWaOrGwa(petName)}와 대화를 나누고 하루를 기록해보세요.`}
               </Text>
             )
           )}
@@ -218,7 +235,7 @@ export default function DiaryScreen() {
           </View>
         </View>
 
-        <View style={styles.diaryCard}>
+  <View style={diaryCardStyle}>
           {/* show advice if present, otherwise friendly placeholder */}
           {diary && diary.advice ? (
             <Text style={styles.diaryText}>{diary.advice}</Text>
@@ -233,6 +250,16 @@ export default function DiaryScreen() {
 
 const styles = StyleSheet.create({
   diaryContainer: {
+    flex: 1,
+    padding: 24,
+    justifyContent: 'flex-start',
+  },
+  diaryContainerToday: {
+    flex: 1,
+    padding: 24,
+    justifyContent: 'flex-start',
+  },
+  diaryContainerList: {
     flex: 1,
     padding: 24,
     justifyContent: 'flex-start',
@@ -255,10 +282,22 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   diaryCard: {
-    backgroundColor: '#F2F2F2',
+    backgroundColor: '#E6E6E6',
     padding: 16,
     borderRadius: 16,
-    marginTop: 16,
+    marginTop: 0,
+  },
+  diaryCardToday: {
+    backgroundColor: '#E6E6E6',
+    padding: 16,
+    borderRadius: 16,
+    marginTop: 0,
+  },
+  diaryCardList: {
+    backgroundColor: '#E6E6E6',
+    padding: 16,
+    borderRadius: 16,
+    marginTop: 0,
   },
   diaryText: {
     fontSize: 16,

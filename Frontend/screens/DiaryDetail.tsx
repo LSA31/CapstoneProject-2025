@@ -27,6 +27,7 @@ export default function DiaryDetail() {
   }, []);
 
   const [diary, setDiary] = useState<any | null>(null);
+  const [notFoundDetail, setNotFoundDetail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [nowHour, setNowHour] = useState<number>(new Date().getHours());
   const [petName, setPetName] = useState<string>('코모');
@@ -62,10 +63,11 @@ export default function DiaryDetail() {
       setLoading(true);
       try {
         let res;
-        if (dateParam) res = await getDiaryByDate(dateParam);
-        else res = await getDiaryByDate();
-        if (!mounted) return;
-        setDiary(res);
+          if (dateParam) res = await getDiaryByDate(dateParam);
+          else res = await getDiaryByDate();
+          if (!mounted) return;
+          setDiary(res?.diary ?? null);
+          setNotFoundDetail(res?.notFoundDetail ?? null);
       } catch (e) {
         console.warn('fetch diary failed', e);
         if (mounted) setDiary(null);
@@ -112,14 +114,14 @@ export default function DiaryDetail() {
           ) : null}
         </View>
 
-        <View style={{ ...styles.diaryHeader, marginTop: 20 }}>
+  <View style={{ ...styles.diaryHeader, marginTop: 8 }}>
           <View>
             <Text style={styles.dateText}>{today}</Text>
             <Text style={styles.diaryTitle}>하루 일기</Text>
           </View>
         </View>
 
-        <View style={styles.diaryCard}>
+  <View style={{ ...styles.diaryCard, marginTop: 4 }}>
           {(!dateParam && nowHour < 21) ? (
             loading ? (<ActivityIndicator />) : (diary && diary.content) ? (
               <Text style={styles.diaryText}>{diary.content}</Text>
@@ -135,7 +137,7 @@ export default function DiaryDetail() {
           )}
         </View>
 
-  <View style={{ ...styles.diaryHeader, marginTop: 28 }}>
+  <View style={{ ...styles.diaryHeader, marginTop: 15 }}>
           <View>
             <Text style={styles.dateText}>하루를 마무리하는</Text>
             <View style={{ flexDirection: 'row' }}>
@@ -145,7 +147,7 @@ export default function DiaryDetail() {
           </View>
         </View>
 
-        <View style={styles.diaryCard}>
+  <View style={{ ...styles.diaryCard, marginTop: 4 }}>
           {diary && diary.advice ? (
             <Text style={styles.diaryText}>{diary.advice}</Text>
           ) : (
@@ -162,7 +164,8 @@ const styles = StyleSheet.create({
   diaryHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
   dateText: { fontSize: 18, fontWeight: 'bold', color: '#000' },
   diaryTitle: { fontSize: 28, fontWeight: 'bold', color: '#000', marginTop: 4 },
-  diaryCard: { backgroundColor: '#F2F2F2', padding: 16, borderRadius: 16, marginTop: 16 },
+  // make diary/reply cards slightly darker gray so they stand out from background
+  diaryCard: { backgroundColor: '#E6E6E6', padding: 16, borderRadius: 16, marginTop: 16 },
   diaryText: { fontSize: 16, lineHeight: 24, color: '#333' },
   libraryButton: { padding: 8, borderRadius: 8, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   moreButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: '#f5f5f5', alignSelf: 'flex-start' },

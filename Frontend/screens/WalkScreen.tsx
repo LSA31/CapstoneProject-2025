@@ -51,7 +51,7 @@ export default function WalkScreen() {
       return '눈이 오네요. 길이 미끄러울 수 있으니 조심해서 걸어요.';
     }
     if (['mist', 'smoke', 'haze', 'fog', 'dust', 'sand'].includes(normalized)) {
-      return '안개로 뿌옇습니다. 천천히 주변을 살피며 산책하세요.';
+      return '안개로 뿌옇습니다.천천히 주변을 살피며 산책하세요!';
     }
 
     if (tempValue !== null) {
@@ -133,32 +133,50 @@ export default function WalkScreen() {
         setWeatherMessage('날씨 정보를 불러오는 중이에요...');
       }
       try {
-        // 1) get approximate location from IP (no native permission required)
-        const locRes = await fetch('https://ipapi.co/json/');
-        const locJson = await locRes.json();
-        const lat = locJson.latitude || locJson.lat;
-        const lon = locJson.longitude || locJson.lon;
+        // OPTION: force a specific city (useful when you want to always show 청주시)
+        // Set FORCE_CITY to a string accepted by OpenWeather (e.g. 'Cheongju,KR') and
+        // FORCE_CITY_LABEL to the display name you want shown in the UI.
+        const FORCE_CITY = 'Cheongju,KR';
+        const FORCE_CITY_LABEL = '청주시';
 
-        // 2) fetch OpenWeatherMap current weather (metric units)
-        if (lat && lon && OPENWEATHER_API_KEY && OPENWEATHER_API_KEY !== 'YOUR_OPENWEATHERMAP_API_KEY') {
-          const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${OPENWEATHER_API_KEY}`;
+        if (FORCE_CITY && OPENWEATHER_API_KEY && OPENWEATHER_API_KEY !== 'YOUR_OPENWEATHERMAP_API_KEY') {
+          const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(FORCE_CITY)}&units=metric&appid=${OPENWEATHER_API_KEY}`;
           const wRes = await fetch(url);
           const wJson = await wRes.json();
           if (mounted) {
             setWeather(wJson);
-            setLocName(wJson.name || locJson.city || null);
-            // pick background color based on weather condition
+            // prefer human-friendly label when forcing city
+            setLocName(FORCE_CITY_LABEL || wJson.name || null);
             const main = (wJson.weather && wJson.weather[0] && wJson.weather[0].main) || '';
             setBgColor(colorForWeather(main, wJson));
             const tempValue = typeof wJson.main?.temp === 'number' ? wJson.main.temp : null;
             setWeatherMessage(messageForWeather(main, tempValue));
           }
-        } else if (mounted) {
-          // no API key provided — fall back to IP city only and set color by probable local cloudiness
-          setLocName(locJson.city || null);
-          const probable = (locJson && locJson.region) ? 'Clouds' : 'Clear';
-          setBgColor(colorForWeather(probable, null));
-          setWeatherMessage(messageForWeather(probable, null));
+        } else {
+          // fallback: try approximate IP-based location (no native permission required)
+          const locRes = await fetch('https://ipapi.co/json/');
+          const locJson = await locRes.json();
+          const lat = locJson.latitude || locJson.lat;
+          const lon = locJson.longitude || locJson.lon;
+          if (lat && lon && OPENWEATHER_API_KEY && OPENWEATHER_API_KEY !== 'YOUR_OPENWEATHERMAP_API_KEY') {
+            const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${OPENWEATHER_API_KEY}`;
+            const wRes = await fetch(url);
+            const wJson = await wRes.json();
+            if (mounted) {
+              setWeather(wJson);
+              setLocName(wJson.name || locJson.city || null);
+              const main = (wJson.weather && wJson.weather[0] && wJson.weather[0].main) || '';
+              setBgColor(colorForWeather(main, wJson));
+              const tempValue = typeof wJson.main?.temp === 'number' ? wJson.main.temp : null;
+              setWeatherMessage(messageForWeather(main, tempValue));
+            }
+          } else if (mounted) {
+            // no API key provided or no coords — fall back to IP city only
+            setLocName(locJson.city || null);
+            const probable = (locJson && locJson.region) ? 'Clouds' : 'Clear';
+            setBgColor(colorForWeather(probable, null));
+            setWeatherMessage(messageForWeather(probable, null));
+          }
         }
       } catch (e) {
         // ignore errors, keep defaults

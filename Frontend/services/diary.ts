@@ -12,7 +12,9 @@ export type DiaryItem = {
   dialog?: string[] | null;
 };
 
-export async function getDiaryByDate(date?: string): Promise<DiaryItem | null> {
+export type GetDiaryResult = { diary: DiaryItem | null; notFoundDetail?: string | null };
+
+export async function getDiaryByDate(date?: string): Promise<GetDiaryResult> {
   try {
     // prefer new endpoint /diaries/today which can return today's diaries when no date provided
     // fallback to /diaries?date=... if not available
@@ -22,9 +24,9 @@ export async function getDiaryByDate(date?: string): Promise<DiaryItem | null> {
       const res = date ? await api.get('/diaries/today', { params: { date } }) : await api.get('/diaries/today');
       console.log('[diary] getDiaryByDate /diaries/today response', res.status, res.data);
       if (Array.isArray(res.data)) {
-        return res.data.length ? (res.data[res.data.length - 1] as DiaryItem) : null;
+        return { diary: res.data.length ? (res.data[res.data.length - 1] as DiaryItem) : null };
       }
-      return res.data as DiaryItem;
+      return { diary: res.data as DiaryItem };
     } catch (e) {
       console.warn('[diary] /diaries/today failed, falling back to /diaries?date', String(e));
     }
@@ -33,23 +35,31 @@ export async function getDiaryByDate(date?: string): Promise<DiaryItem | null> {
       console.log('[diary] GET /diaries?date=', date);
       const res2 = await api.get('/diaries', { params: { date } });
       console.log('[diary] getDiaryByDate /diaries response', res2.status, res2.data);
-      if (Array.isArray(res2.data)) return res2.data.length ? (res2.data[res2.data.length - 1] as DiaryItem) : null;
-      return res2.data as DiaryItem;
+      if (Array.isArray(res2.data)) return { diary: res2.data.length ? (res2.data[res2.data.length - 1] as DiaryItem) : null };
+      return { diary: res2.data as DiaryItem };
     }
     // final fallback: try GET /diaries (list) and return the most recent entry if present
     try {
       const resAll = await api.get('/diaries');
-      if (Array.isArray(resAll.data) && resAll.data.length) return resAll.data[resAll.data.length - 1] as DiaryItem;
+      if (Array.isArray(resAll.data) && resAll.data.length) return { diary: resAll.data[resAll.data.length - 1] as DiaryItem };
     } catch (eAll) {
       // ignore
     }
-    return null;
+    return { diary: null };
   } catch (e: any) {
-    // 404 -> no diary for that date, return null. Other errors rethrow.
+    // Treat 404 (Not Found) and certain 401 (Unauthorized returned by some backends
+    // when a diary isn't present) as "no diary yet" and return null. Other errors
+    // should still be surfaced.
     const status = e?.response?.status;
     // eslint-disable-next-line no-console
     console.warn('[diary] getDiaryByDate error status=', status, e?.message || e);
-    if (status === 404) return null;
+    const detail = e?.response?.data?.detail;
+    if (status === 404 || status === 401) {
+      // Log that we're intentionally treating 401/404 like 'no diary' for UX resilience
+      // eslint-disable-next-line no-console
+      console.log('[diary] treating status', status, 'as no-diary -> returning null, detail=', detail);
+      return { diary: null, notFoundDetail: typeof detail === 'string' ? detail : null };
+    }
     throw e;
   }
 }

@@ -25,7 +25,13 @@ export default function DiaryList() {
         const res = await listDiaries(iso);
         if (!mounted) return;
         // filter out entries with empty/blank content so they are not shown
-        const filtered = (res || []).filter((it: DiaryItem) => typeof it.content === 'string' && it.content.trim().length > 0);
+        let filtered = (res || []).filter((it: DiaryItem) => typeof it.content === 'string' && it.content.trim().length > 0);
+        // sort by date descending (newest first). Use Date parse to handle various date formats.
+        filtered = filtered.sort((a, b) => {
+          const ta = a.date ? new Date(a.date).getTime() : 0;
+          const tb = b.date ? new Date(b.date).getTime() : 0;
+          return tb - ta;
+        });
         setItems(filtered);
         // only show debug message when there are visible items
         if (filtered.length > 0) {
@@ -75,7 +81,8 @@ export default function DiaryList() {
             <Text style={styles.backTextShort}>{'<'}</Text>
           </TouchableOpacity>
           <View style={{ width: 76 }} />
-        </View>
+  </View>
+  <View style={{ height: 12 }} />
         {debugMsg ? <Text style={{ textAlign: 'center', marginTop: 8, color: '#999' }}>{debugMsg}</Text> : null}
         <Text style={{ textAlign: 'center', marginTop: 24, color: '#666' }}>아직 작성된 일기가 없습니다.</Text>
           <TouchableOpacity style={styles.refreshButton} onPress={() => {
@@ -85,7 +92,12 @@ export default function DiaryList() {
           (async () => {
             try {
                 const res = await listDiaries();
-                const filtered = (res || []).filter((it: DiaryItem) => typeof it.content === 'string' && it.content.trim().length > 0);
+                let filtered = (res || []).filter((it: DiaryItem) => typeof it.content === 'string' && it.content.trim().length > 0);
+                filtered = filtered.sort((a, b) => {
+                  const ta = a.date ? new Date(a.date).getTime() : 0;
+                  const tb = b.date ? new Date(b.date).getTime() : 0;
+                  return tb - ta;
+                });
                 setItems(filtered);
                 if (filtered.length > 0) setDebugMsg(`loaded ${filtered.length} items`); else setDebugMsg(null);
             } catch (e: any) {
@@ -110,9 +122,11 @@ export default function DiaryList() {
           if ((navigation as any).navigate) return navigation.navigate('MainApp' as any);
         }} style={styles.backButtonHeader} accessibilityLabel="뒤로가기">
           <Text style={styles.backTextShort}>{'<'}</Text>
+          
         </TouchableOpacity>
         <View style={{ width: 76 }} />
       </View>
+      <View style={{ height: 15 }} />
       <FlatList
         data={visibleItems}
         keyExtractor={(item) => item.diary_id}
@@ -120,14 +134,19 @@ export default function DiaryList() {
           <TouchableOpacity
             style={styles.item}
             onPress={() => {
-              if ((navigation as any).navigate) navigation.navigate('DiaryDetail', { date: item.date });
+              if ((navigation as any).navigate) navigation.navigate('Diary', { date: item.date, fromList: true, hideMore: true });
             }}
           >
             <View style={styles.itemLeft}>
-              <Text style={styles.itemDate}>{item.date}</Text>
-              <Text style={styles.itemTitle}>{item.content ? item.content.slice(0, 36) : '제목 없음'}</Text>
+              <Text style={styles.itemDate}>{item.date} 일기장 {'\n'}</Text>
+              <Text
+                style={styles.itemTitle}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {item.content ? (item.content.length > 30 ? item.content.substring(0, 30) + '...' : item.content) : '제목 없음'}
+              </Text>
             </View>
-            <Text style={styles.itemSnippet}>{item.content ? item.content.slice(0, 80) : ''}</Text>
           </TouchableOpacity>
         )}
       />
@@ -143,10 +162,10 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700' },
   refreshButton: { marginTop: 18, alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8, backgroundColor: '#3f3023' },
   refreshText: { color: '#fff', fontWeight: '700' },
-  item: { padding: 12, borderRadius: 10, backgroundColor: '#f2f2f2', marginBottom: 10 },
+  item: { padding: 12, borderRadius: 10, backgroundColor: '#f2f2f2', marginBottom: 22 },
   itemLeft: { marginBottom: 6 },
-  itemDate: { fontSize: 12, color: '#666' },
-  itemTitle: { fontSize: 16, fontWeight: '700', color: '#000' },
+  itemDate: { fontSize: 18, fontWeight: '700', color: '#000' },
+  itemTitle: { fontSize: 16, fontWeight: '700', color: '#626060ff' },
   itemSnippet: { fontSize: 14, color: '#333', marginTop: 6 },
   screenHeader: {
     flexDirection: 'row',

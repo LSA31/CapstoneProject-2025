@@ -43,6 +43,41 @@ export const api = axios.create({
   },
 });
 
+// --- Debug logging interceptors (temporary) ---
+// Logs outgoing requests and incoming responses to help trace 404/401 issues.
+// NOTE: This is intended for development only. It avoids printing full tokens but
+// shows whether Authorization was attached.
+api.interceptors.request.use((config) => {
+  try {
+    const method = (config.method || 'get').toUpperCase();
+    const base = typeof config.baseURL === 'string' ? config.baseURL.replace(/\/$/, '') : '';
+    const url = `${base}${config.url || ''}`;
+    // avoid printing token value; only show whether it's present
+    const hasAuth = !!(config.headers && (config.headers as any).Authorization);
+    // eslint-disable-next-line no-console
+    console.log('[api][request]', method, url, 'params=', config.params || null, 'hasAuth=', hasAuth);
+  } catch (e) {}
+  return config;
+}, (err) => {
+  // eslint-disable-next-line no-console
+  console.warn('[api][request error]', String(err));
+  return Promise.reject(err);
+});
+
+api.interceptors.response.use((res) => {
+  try {
+    // eslint-disable-next-line no-console
+    console.log('[api][response]', res.config?.url, 'status=', res.status);
+  } catch (e) {}
+  return res;
+}, (err) => {
+  try {
+    // eslint-disable-next-line no-console
+    console.warn('[api][response error]', err.config?.url, 'status=', err?.response?.status, 'message=', err.message);
+  } catch (e) {}
+  return Promise.reject(err);
+});
+
 // Attach access token from AsyncStorage if present
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   try {
